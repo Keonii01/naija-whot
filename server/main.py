@@ -4,6 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from room_manager import RoomManager
 
 app = FastAPI()
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -34,7 +39,3 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await manager.handle_message(pid, msg)
     except WebSocketDisconnect:
         await manager.disconnect(pid, websocket)
-
-@app.get("/health")
-async def health_check():
-    return {"status": "ok"}
