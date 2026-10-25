@@ -34,3 +34,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
             await manager.handle_message(pid, msg)
     except WebSocketDisconnect:
         await manager.disconnect(pid, websocket)
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
