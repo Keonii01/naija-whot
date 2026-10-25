@@ -1,0 +1,24 @@
+import { useState } from 'react';
+import LobbyHome from './lobby/LobbyHome';
+import CreateRoom from './lobby/CreateRoom';
+import JoinRoom from './lobby/JoinRoom';
+import WaitingRoom from './lobby/WaitingRoom';
+
+export default function Lobby({ socket }) {
+  const [mode, setMode] = useState(null);
+
+  // If in a room, show waiting room
+  if (socket.room !== null) {
+    return <WaitingRoom socket={socket} />;
+  }
+
+  // Show appropriate lobby screen based on mode
+  switch (mode) {
+    case 'create':
+      return <CreateRoom socket={socket} onBack={() => setMode(null)} />;
+    case 'join':
+      return <JoinRoom socket={socket} onBack={() => setMode(null)} />;
+    default:
+      return <LobbyHome onSelectMode={setMode} />;
+  }
+}

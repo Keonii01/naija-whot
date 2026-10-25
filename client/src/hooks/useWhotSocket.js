@@ -1,0 +1,132 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { sounds } from '../utils/sounds';
+
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws';
+const RECONNECT_DELAY = 2000;
+
+export function useWhotSocket() {
+  // Secret token: only this browser knows it. The public id comes from the server.
+  const [token] = useState(() => {
+    let t = localStorage.getItem('whot_token');
+    if (!t) {
+      t = crypto.randomUUID?.() ??
+        Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('whot_token', t);
+    }
+    return t;
+  });
+  const [clientId, setClientId] = useState(null);   // public id, assigned by the server
+
+  const [connected, setConnected] = useState(false);
+  const [room, setRoom] = useState(null);
+  const [gameState, setGameState] = useState(null);
+  const [error, setError] = useState(null);
+  const [gameOver, setGameOver] = useState(null);
+
+  const wsRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const manualCloseRef = useRef(false);
+
+  const connect = useCallback(() => {
+    const ws = new WebSocket(`${WS_URL}/${token}`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setConnected(true);
+      const storedRoom = localStorage.getItem('whot_room_code');
+      const storedName = localStorage.getItem('whot_player_name');
+      if (storedRoom) {
+        ws.send(JSON.stringify({ type: 'rejoin', room_code: storedRoom, player_name: storedName }));
+      }
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      if (!manualCloseRef.current) {
+        reconnectTimerRef.current = setTimeout(connect, RECONNECT_DELAY);
+      }
+    };
+
+    ws.onerror = () => ws.close();
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      switch (msg.type) {
+        case 'welcome':
+          setClientId(msg.player_id);
+          break;
+        case 'room_update':
+          setRoom(msg);
+          localStorage.setItem('whot_room_code', msg.room_code);
+          break;
+        case 'game_state':
+          setGameState(msg.state);
+          break;
+        case 'error':
+          setError(msg.message);
+          sounds.error();
+          setTimeout(() => setError(null), 3000);
+          break;
+        case 'game_over':
+          setGameOver(msg.winner);
+          break;
+        case 'rejoin_failed':
+          localStorage.removeItem('whot_room_code');
+          setRoom(null);
+          setGameState(null);
+          break;
+        default:
+          break;
+      }
+    };
+  }, [clientId]);
+
+  useEffect(() => {
+    connect();
+    return () => {
+      manualCloseRef.current = true;
+      clearTimeout(reconnectTimerRef.current);
+      wsRef.current?.close();
+    };
+  }, [connect]);
+
+  const send = useCallback((payload) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(payload));
+    }
+  }, []);
+
+  const createRoom = (name) => {
+    localStorage.setItem('whot_player_name', name);
+    send({ type: 'create_room', player_name: name });
+  };
+
+  const joinRoom = (code, name) => {
+    localStorage.setItem('whot_player_name', name);
+    send({ type: 'join_room', room_code: code, player_name: name });
+  };
+
+  const leaveRoom = () => {
+    send({ type: 'leave_room' });
+    localStorage.removeItem('whot_room_code');
+    setRoom(null);
+    setGameState(null);
+  };
+
+  return {
+    clientId,
+    connected,
+    room,
+    gameState,
+    error,
+    gameOver,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    startGame: () => send({ type: 'start_game' }),
+    playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
+    playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
+    drawCard: () => send({ type: 'draw_card' }),
+    rematch: () => send({ type: 'rematch' }),
+  };
+}
