@@ -14,6 +14,11 @@ export default function Lobby({ socket }) {
       <div className="flex flex-col items-center justify-center min-h-screen p-6">
         <h1 className="text-3xl font-bold mb-2">Room: {socket.room.room_code}</h1>
         <p className="mb-6 text-green-200">Share this code with friends (max 8 players)</p>
+        {socket.room.last_result && (
+          <p className="mb-4 text-yellow-300 text-sm">
+            Last game: {socket.room.last_result.winner ? `${socket.room.last_result.winner} won` : 'it was a tie'}
+          </p>
+        )}
         <div className="bg-green-800 rounded-xl p-6 w-full max-w-md">
           <h2 className="font-semibold mb-3">Players ({players.length}/8)</h2>
           <ul className="space-y-2">

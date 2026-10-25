@@ -70,6 +70,20 @@ export function useWhotSocket() {
         case 'game_over':
           setGameOver(msg.winner);
           break;
+        case 'back_to_lobby':
+          setGameState(null);
+          break;
+        case 'notice':
+          setError(msg.message);
+          setTimeout(() => setError(null), 6000);
+          break;
+        case 'kicked':
+          localStorage.removeItem('whot_room_code');
+          setRoom(null);
+          setGameState(null);
+          setError(msg.message);
+          setTimeout(() => setError(null), 6000);
+          break;
         case 'rejoin_failed':
           localStorage.removeItem('whot_room_code');
           setRoom(null);
@@ -128,5 +142,7 @@ export function useWhotSocket() {
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
     drawCard: () => send({ type: 'draw_card' }),
     rematch: () => send({ type: 'rematch' }),
+    lastCard: () => send({ type: 'last_card' }),
+    returnToLobby: () => send({ type: 'return_to_lobby' }),
   };
 }

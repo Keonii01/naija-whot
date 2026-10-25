@@ -8,7 +8,7 @@ import { sounds } from '../utils/sounds';
 const TURN_SECONDS = 30;
 
 export default function GameTable({ socket }) {
-  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch } = socket;
+  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby } = socket;
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
   const prevStateRef = useRef(null);
@@ -114,10 +114,15 @@ export default function GameTable({ socket }) {
                 </button>
               )}
               {!isHost && !isSpectator && (
-                <p className="text-sm text-green-800">Waiting for the host to start a rematch…</p>
+                <p className="text-sm text-green-800">The host can start a rematch…</p>
               )}
-              <button onClick={leaveRoom} className="bg-green-700 text-white px-4 py-2 rounded">
-                Leave table
+              {!isSpectator && (
+                <button onClick={returnToLobby} className="bg-green-700 text-white px-4 py-2 rounded">
+                  Back to waiting room
+                </button>
+              )}
+              <button onClick={leaveRoom} className="text-red-600 underline text-sm mt-1">
+                Leave room
               </button>
             </div>
           </div>
@@ -189,6 +194,18 @@ export default function GameTable({ socket }) {
               disabled={!isMyTurn}
               className="bg-yellow-500 disabled:opacity-40 text-green-900 font-bold px-4 py-1.5 rounded"
             >
+              {me?.hand.length === 1 && !gameState.game_over && (
+                me.last_card_called ? (
+                  <span className="text-yellow-300 font-bold">✓ Last Card called</span>
+                ) : (
+                  <button
+                    onClick={lastCard}
+                    className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-4 py-1.5 rounded animate-pulse"
+                  >
+                    LAST CARD!
+                  </button>
+                )
+              )}
               Draw Card
             </button>
           </div>

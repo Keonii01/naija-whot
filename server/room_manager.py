@@ -12,6 +12,7 @@ TURN_SECONDS = 30
 HOST_GRACE = 15      # seconds before a disconnected host hands over
 LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
+AFK_LIMIT = 3        # consecutive missed turns before a player is removed
 
 def gen_room_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
@@ -30,6 +31,8 @@ class Room:
         self.turn_deadline = None
         self.cleanup_task = None
         self.host_task = None
+        self.afk = {}              # player id -> consecutive missed turns
+        self.last_result = None    # shown in the waiting room after a game
 
     def add_player(self, player_id, name):
         if player_id in self.players:
@@ -55,6 +58,7 @@ class Room:
             "host_id": self.host_id,
             "started": self.started,
             "players": [{"id": pid, "name": p.name} for pid, p in self.players.items()],
+            "last_result": self.last_result,
         }
 
     def start_game(self):
@@ -63,6 +67,8 @@ class Room:
         self.players = {p.id: p for p in fresh}
         self.game = WhotGame(fresh)
         self.started = True
+        self.afk = {}
+        self.last_result = None
 
 
 class RoomManager:
@@ -215,6 +221,46 @@ class RoomManager:
             else:
                 await self.broadcast_lobby(room)
 
+    async def _reset_to_lobby(self, room):
+        """Game finished: everyone goes back to the waiting room of the same room."""
+        game = room.game
+        winner = game.get_player(game.winner_id) if game.winner_id else None
+        room.last_result = {"winner": winner.name if winner else None, "reason": game.end_reason}
+        staying = [p.id for p in game.players
+                   if p.connected and p.id in self.connections and p.id in room.players]
+        for pid in list(room.order):
+            if pid not in staying:
+                room.remove_player(pid)                  # gone players don't carry over
+        for sid, name in list(room.spectators.items()):  # spectators join the next game if there is room
+            if len(room.order) >= 8:
+                break
+            if sid in self.connections:
+                room.add_player(sid, name)
+                room.remove_spectator(sid)
+        self._stop_timer(room)
+        room.game = None
+        room.started = False
+        room.afk = {}
+        self._pick_new_host(room)
+        everyone = list(room.order) + list(room.spectators)
+        for pid in everyone:
+            await self.send(pid, {"type": "back_to_lobby"})
+        await self.broadcast_lobby(room)
+
+    async def _kick_afk(self, room, player):
+        pid = player.id
+        room.game.remove_player(pid, "was removed for being inactive")
+        room.remove_player(pid)
+        room.afk.pop(pid, None)
+        self.player_rooms.pop(pid, None)
+        await self.send(pid, {"type": "kicked", "message": "You were removed from the game for being inactive."})
+        if pid == room.host_id:
+            self._pick_new_host(room)
+        if self._room_is_empty(room):
+            self._delete_room(room)
+            return
+        await self._after_action(room)
+
     async def _after_action(self, room):
         """After any move/draw/leave: stop the clock if the game ended, else start the next turn."""
         if room.game.game_over:
@@ -245,7 +291,15 @@ class RoomManager:
             return  # a newer timer superseded this one
 
         current = room.game.current_player()
-        room.game.force_timeout_draw(current.id)
+        pid = current.id
+        room.afk[pid] = room.afk.get(pid, 0) + 1
+        if room.afk[pid] >= AFK_LIMIT:
+            await self._kick_afk(room, current)
+            return
+        if room.afk[pid] == AFK_LIMIT - 1:
+            await self.send(pid, {"type": "notice", "message":
+                "You've missed 2 turns in a row. Miss one more and you'll be removed from the game."})
+        room.game.force_timeout_draw(pid)
         await self._after_action(room)
 
     def _stop_timer(self, room):
@@ -326,6 +380,8 @@ class RoomManager:
             if not room or room.host_id != client_id:
                 await self.send(client_id, {"type": "error", "message": "Only host can start"})
                 return
+            if room.started:
+                return
             if len(room.players) < 2:
                 await self.send(client_id, {"type": "error", "message": "Need at least 2 players"})
                 return
@@ -345,6 +401,11 @@ class RoomManager:
             if not result.get("success"):
                 await self.send(client_id, {"type": "error", "message": result.get("error")})
                 return
+            room.afk[client_id] = 0
+            if result.get("penalty") == "last_card":
+                await self.send(client_id, {"type": "notice", "message":
+                    f"You didn't call Last Card before playing your final card, so you don't win. "
+                    f"You draw {result['drawn']} cards."})
             await self._after_action(room)
 
         elif mtype == "draw_card":
@@ -355,7 +416,26 @@ class RoomManager:
             if not result.get("success"):
                 await self.send(client_id, {"type": "error", "message": result.get("error")})
                 return
+            room.afk[client_id] = 0
             await self._after_action(room)
+
+        elif mtype == "last_card":
+            room = self._get_room(client_id)
+            if not room or not room.game:
+                return
+            result = room.game.call_last_card(client_id)
+            if not result.get("success"):
+                await self.send(client_id, {"type": "error", "message": result.get("error")})
+                return
+            await self.broadcast_game_state(room)
+
+        elif mtype == "return_to_lobby":
+            room = self._get_room(client_id)
+            if not room or not (room.started and room.game and room.game.game_over):
+                return
+            if client_id not in room.players:
+                return                                   # spectators can't reset the room
+            await self._reset_to_lobby(room)
 
         elif mtype == "leave_room":
             room = self._get_room(client_id)

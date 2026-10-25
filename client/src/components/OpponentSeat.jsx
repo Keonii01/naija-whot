@@ -10,6 +10,7 @@ export default function OpponentSeat({ player, isCurrent }) {
       </div>
       <span className="text-sm font-semibold">{player.name}</span>
       <span className="text-xs text-green-300">{player.card_count} cards</span>
+      {player.last_card_called && <span className="text-xs font-bold text-yellow-300">Last Card!</span>}
       {!player.connected && <span className="text-xs text-red-400">disconnected</span>}
     </div>
   );

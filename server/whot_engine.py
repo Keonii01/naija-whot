@@ -3,6 +3,8 @@ import uuid
 
 SHAPES = ['Circle', 'Triangle', 'Cross', 'Square', 'Star', 'Whot']
 
+LAST_CARD_PENALTY = 5   # cards drawn for winning without calling Last Card
+
 SPECIAL_NAMES = {
     1: "Hold On",
     2: "Pick Two",
@@ -52,6 +54,7 @@ class Player:
         self.name = name
         self.hand = []
         self.connected = True
+        self.last_card_called = False
 
     def to_public_dict(self):
         return {
@@ -59,6 +62,7 @@ class Player:
             "name": self.name,
             "card_count": len(self.hand),
             "connected": self.connected,
+            "last_card_called": self.last_card_called,
         }
 
     def to_private_dict(self):
@@ -166,7 +170,8 @@ class WhotGame:
             self.winner_id = top[0]["id"] if len(top) == 1 else None  # None = tie
 
     def _check_market_end(self):
-        """Market is finished and the player on turn has nothing to play: count the cards."""
+        """Runs after every action: tidy Last Card calls, then see if the market has finished."""
+        self._sync_last_card()
         if self.game_over or self._can_draw():
             return
         if self.playable_cards(self.current_player()):
@@ -178,7 +183,7 @@ class WhotGame:
         else:
             self.last_action = "The market is finished! It's a tie."
 
-    def remove_player(self, player_id):
+    def remove_player(self, player_id, note="left the game"):
         """A player leaves mid-game: their cards go back to the market."""
         player = self.get_player(player_id)
         if player is None or self.game_over:
@@ -189,15 +194,39 @@ class WhotGame:
         self.players.pop(idx)
         if len(self.players) == 1:
             self._finish("forfeit", self.players[0])
-            self.last_action = f"{player.name} left. {self.players[0].name} wins by default!"
+            self.last_action = f"{player.name} {note}. {self.players[0].name} wins by default!"
             return
         if idx < self.current_idx:
             self.current_idx -= 1
         elif was_current:
             self.pending_pick = 0                    # the penalty leaves with them
         self.current_idx %= len(self.players)
-        self.last_action = f"{player.name} left the game."
+        self.last_action = f"{player.name} {note}."
         self._check_market_end()
+
+    def call_last_card(self, player_id):
+        player = self.get_player(player_id)
+        if player is None or self.game_over:
+            return {"success": False, "error": "You're not in a running game"}
+        if len(player.hand) != 1:
+            return {"success": False, "error": "You can only call Last Card when you have one card left"}
+        player.last_card_called = True
+        return {"success": True}
+
+    def _sync_last_card(self):
+        """A Last Card call only counts while the player still holds exactly one card."""
+        for p in self.players:
+            if len(p.hand) != 1:
+                p.last_card_called = False
+
+    def _last_card_penalty(self, player, played):
+        """Played the final card without calling Last Card: no win, draw penalty cards."""
+        drawn = self.draw_from_deck(player, LAST_CARD_PENALTY)
+        self._advance()
+        self.last_action = (f"{player.name} played {played} without calling Last Card! "
+                            f"No win - draws {len(drawn)} cards.")
+        self._check_market_end()
+        return {"success": True, "penalty": "last_card", "drawn": len(drawn), "message": self.last_action}
 
     def _is_playable(self, card):
         if self.pending_pick > 0:
@@ -234,14 +263,18 @@ class WhotGame:
             return {"success": False, "error": "Combined cards must share the same number"}
         if cards[0].shape == 'Whot' and chosen_shape not in [s for s in SHAPES if s != 'Whot']:
             return {"success": False, "error": "Choose a shape for Whot"}
-
+    
+        was_last_card = len(player.hand) == 1
         for card in cards:
             player.hand.remove(card)
             self.discard_pile.append(card)
         self.pending_shape = None
 
         played = " + ".join(repr(c) for c in cards)
-        if len(player.hand) == 0 and cards[-1].number not in SPECIAL_NAMES:
+        would_win = len(player.hand) == 0 and cards[-1].number not in SPECIAL_NAMES
+        if would_win and was_last_card and not player.last_card_called:
+            return self._last_card_penalty(player, played)
+        if would_win:
             self._finish("win", player)
             self.last_action = f"{player.name} played {played} and WINS! 🎉"
             return {"success": True, "game_over": True, "winner": player.name}
