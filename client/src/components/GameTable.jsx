@@ -76,10 +76,10 @@ export default function GameTable({ socket }) {
   const isHost = gameState.host_id === clientId;
 
   return (
-    <div className="min-h-screen flex flex-col justify-between p-4">
+    <div className="min-h-[100dvh] flex flex-col gap-2 p-3">
       {gameState.game_over && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white text-green-900 rounded-xl p-6 w-full max-w-sm text-center">
+          <div className="bg-white text-green-900 rounded-xl p-6 w-full max-w-sm max-h-[90dvh] overflow-y-auto text-center">
             <h2 className="text-2xl font-bold mb-1">
               {winner
                 ? (winner.id === clientId ? '🏆 You win!' : `🏆 ${winner.name} wins!`)
@@ -98,10 +98,10 @@ export default function GameTable({ socket }) {
                 {(gameState.ranking ?? []).map((r) => (
                   <li
                     key={r.id}
-                    className={`flex justify-between rounded px-3 py-1 ${r.id === clientId ? 'bg-yellow-100 font-semibold' : 'bg-green-50'}`}
+                    className={`flex justify-between gap-3 rounded px-3 py-1 ${r.id === clientId ? 'bg-yellow-100 font-semibold' : 'bg-green-50'}`}
                   >
-                    <span>{r.rank}. {r.name}</span>
-                    <span>{r.points} pts · {r.cards} {r.cards === 1 ? 'card' : 'cards'}</span>
+                    <span className="truncate">{r.rank}. {r.name}</span>
+                    <span className="whitespace-nowrap">{r.points} pts · {r.cards} {r.cards === 1 ? 'card' : 'cards'}</span>
                   </li>
                 ))}
               </ol>
@@ -129,35 +129,37 @@ export default function GameTable({ socket }) {
         </div>
       )}
 
-      {!isSpectator && !gameState.game_over && (
-        <button
-          onClick={() => window.confirm('Leave this game?') && leaveRoom()}
-          className="fixed top-16 right-4 z-40 text-red-300 underline text-sm"
-        >
-          Leave
-        </button>
-      )}
-
       {pendingWhotIds && <ShapeModal onSelect={handleShapeSelect} />}
 
       {isSpectator && (
-        <div className="text-center mb-2 bg-blue-900/60 rounded-lg py-1 flex items-center justify-center gap-3">
+        <div className="text-center bg-blue-900/60 rounded-lg py-1 flex items-center justify-center gap-3">
           <span>👁️ You are spectating this game</span>
           <button onClick={leaveRoom} className="text-red-300 underline text-sm">Leave</button>
         </div>
       )}
 
-      <div className="w-full max-w-md mx-auto mb-2">
-        <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
+      {/* top bar: timer + Leave (pl-12 leaves room for the mute button) */}
+      <div className="flex items-center gap-3 pl-12">
+        <div className="flex-1">
+          <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
+        </div>
+        {!isSpectator && !gameState.game_over && (
+          <button
+            onClick={() => window.confirm('Leave this game?') && leaveRoom()}
+            className="text-red-300 underline text-sm py-2 px-1 touch-manipulation"
+          >
+            Leave
+          </button>
+        )}
       </div>
 
-      <div className="flex flex-wrap justify-center gap-4 mb-4">
+      <div className="flex flex-wrap justify-center gap-x-2 gap-y-1">
         {opponents.map((p) => (
           <OpponentSeat key={p.id} player={p} isCurrent={gameState.current_player_id === p.id} />
         ))}
       </div>
 
-      <div className="flex-1 flex items-center justify-center gap-8">
+      <div className="flex-1 min-h-[9rem] flex items-center justify-center gap-6">
         <div className="flex flex-col items-center">
           <span className="text-sm mb-1 text-green-300">Deck ({gameState.deck_count})</span>
           <Card faceDown size="lg" />
@@ -178,52 +180,61 @@ export default function GameTable({ socket }) {
         </div>
       </div>
 
-      <div className="text-center mb-2">
-        <p className="text-sm text-green-200 h-5">{gameState.last_action}</p>
+      <div className="text-center">
+        <p className="text-sm text-green-200 min-h-[2.5rem] leading-tight flex items-center justify-center">
+          {gameState.last_action}
+        </p>
         <p className={`font-bold ${isMyTurn ? 'text-yellow-300' : 'text-green-400'}`}>
           {isSpectator ? `${currentPlayerName}'s turn` : isMyTurn ? 'Your turn!' : `Waiting for ${currentPlayerName}...`}
         </p>
       </div>
 
       {!isSpectator && (
-        <div className="bg-green-800/60 rounded-xl p-4">
-          <div className="flex justify-between items-center mb-2">
+        <div className="bg-green-800/60 rounded-xl p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
             <span className="font-semibold">Your Hand ({me?.hand.length ?? 0})</span>
             <button
               onClick={drawCard}
               disabled={!isMyTurn}
-              className="bg-yellow-500 disabled:opacity-40 text-green-900 font-bold px-4 py-1.5 rounded"
+              className="bg-yellow-500 disabled:opacity-40 text-green-900 font-bold px-5 min-h-[44px] rounded-lg touch-manipulation"
             >
-              {me?.hand.length === 1 && !gameState.game_over && (
-                me.last_card_called ? (
-                  <span className="text-yellow-300 font-bold">✓ Last Card called</span>
-                ) : (
-                  <button
-                    onClick={lastCard}
-                    className="bg-red-600 hover:bg-red-500 text-white font-extrabold px-4 py-1.5 rounded animate-pulse"
-                  >
-                    LAST CARD!
-                  </button>
-                )
-              )}
               Draw Card
             </button>
           </div>
+
+          {me?.hand.length === 1 && !gameState.game_over && (
+            me.last_card_called ? (
+              <div className="mb-2 rounded-lg bg-green-700 text-yellow-300 font-bold text-center py-3">
+                ✓ Last Card called
+              </div>
+            ) : (
+              <button
+                onClick={lastCard}
+                className="lastcard-glow touch-manipulation mb-2 w-full min-h-[52px] rounded-lg bg-red-600 active:bg-red-700 text-white text-lg font-extrabold tracking-wide"
+              >
+                LAST CARD!
+              </button>
+            )
+          )}
+
           {selected.length > 0 && (
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <span className="text-sm text-green-200">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-2">
+              <span className="basis-full text-center text-sm text-green-200">
                 {selected.length} selected{comboMates.size > selected.length - 1 ? ' — tap more of the same number to add' : ''}
               </span>
               <button
                 onClick={() => submitPlay(selected)}
-                className="bg-yellow-500 text-green-900 font-bold px-4 py-1.5 rounded"
+                className="bg-yellow-500 text-green-900 font-bold px-4 min-h-[44px] rounded-lg touch-manipulation"
               >
                 Play {selected.length > 1 ? `${selected.length} cards` : 'this card'}
               </button>
-              <button onClick={() => setSelected([])} className="text-green-300 underline text-sm">Cancel</button>
+              <button onClick={() => setSelected([])} className="text-green-300 underline text-sm py-2 px-2 touch-manipulation">
+                Cancel
+              </button>
             </div>
           )}
-          <div className="flex flex-wrap gap-2 justify-center">
+
+          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 max-h-[30dvh] overflow-y-auto px-2 pt-4 pb-1">
             {me?.hand.map((card) => (
               <div
                 key={card.id}

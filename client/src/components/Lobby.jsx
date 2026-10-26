@@ -44,7 +44,7 @@ export default function Lobby({ socket }) {
 
         <button
           onClick={socket.leaveRoom}
-          className="mt-4 text-red-300 hover:text-red-200 text-sm underline"
+          className="mt-4 py-2 px-3 text-red-300 hover:text-red-200 text-sm underline"
         >
           Leave Room
         </button>
@@ -53,7 +53,7 @@ export default function Lobby({ socket }) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6">
+    <div className="flex flex-col items-center justify-center min-h-screen px-6 pb-6 pt-16">
       <h1 className="text-4xl font-extrabold mb-8">🎴 Naija Whot</h1>
 
       {!mode && (

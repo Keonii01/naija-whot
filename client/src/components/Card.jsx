@@ -9,9 +9,9 @@ const SHAPE_STYLES = {
 
 function sizeClasses(size) {
   switch (size) {
-    case 'sm': return 'w-10 h-14 text-xs';
-    case 'lg': return 'w-20 h-28 text-base';
-    default: return 'w-14 h-20 text-sm';
+    case 'sm': return 'w-7 h-10 sm:w-10 sm:h-14 text-xs';
+    case 'lg': return 'w-16 h-24 sm:w-20 sm:h-28 text-base';
+    default: return 'w-12 h-[4.5rem] sm:w-14 sm:h-20 text-sm';
   }
 }
 
@@ -32,15 +32,15 @@ export default function Card({ card, onClick, disabled, size = 'md', faceDown = 
       onClick={onClick}
       disabled={disabled}
       className={`${sizeClasses(size)} relative rounded-lg bg-white text-gray-900 border-2 shadow-md flex flex-col items-center justify-center
-        transition-transform
+        transition-transform touch-manipulation
         ${disabled ? 'cursor-default border-gray-300' : 'cursor-pointer hover:-translate-y-2 hover:border-yellow-400 border-gray-300'}
         ${isWhot ? 'bg-gradient-to-br from-pink-200 via-yellow-200 to-blue-200' : ''}
       `}
     >
-      <span className={`text-xl ${style.color}`}>{style.icon}</span>
-      <span className="font-bold mt-1">{isWhot ? '20' : card.number}</span>
+      <span className={`text-lg sm:text-xl leading-none ${style.color}`}>{style.icon}</span>
+      <span className="font-bold mt-1 leading-none">{isWhot ? '20' : card.number}</span>
       {card.special && !isWhot && (
-        <span className="text-[8px] text-gray-500 absolute bottom-1 px-1 text-center leading-tight">
+        <span className="text-[7px] sm:text-[8px] text-gray-500 mt-0.5 px-0.5 text-center leading-none">
           {card.special}
         </span>
       )}

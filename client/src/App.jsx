@@ -32,7 +32,7 @@ export default function App() {
       )}
 
       {socket.error && (
-        <div className="fixed top-4 right-4 bg-red-600 px-4 py-2 rounded shadow-lg z-50">
+        <div className="fixed top-14 left-3 right-3 sm:top-4 sm:left-auto sm:right-4 sm:max-w-sm bg-red-600 px-4 py-2 rounded shadow-lg z-50 text-center sm:text-left pointer-events-none">
           {socket.error}
         </div>
       )}

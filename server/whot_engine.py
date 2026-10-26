@@ -99,8 +99,9 @@ class WhotGame:
         for _ in range(self.hand_size):
             for p in self.players:
                 p.hand.append(self.deck.pop())
+        # the card that starts the table is never an action card (1, 2, 5, 8, 14, 20)
         first = self.deck.pop()
-        while first.shape == 'Whot':
+        while first.number in SPECIAL_NAMES:
             self.deck.insert(0, first)
             random.shuffle(self.deck)
             first = self.deck.pop()
