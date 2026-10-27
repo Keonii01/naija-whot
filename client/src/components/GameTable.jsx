@@ -50,6 +50,9 @@ export default function GameTable({ socket }) {
 
   useEffect(() => { setSelected([]); }, [gameState.last_action, gameState.current_player_id]);
 
+  // if the turn moves on (timer ran out, AFK) while the picker is open, close it
+  useEffect(() => { if (!isMyTurn) setPendingWhotIds(null); }, [isMyTurn]);
+
   const submitPlay = (ids) => {
     const first = me?.hand.find((c) => c.id === ids[0]);
     if (first?.shape === 'Whot') setPendingWhotIds(ids);
@@ -71,6 +74,8 @@ export default function GameTable({ socket }) {
     setPendingWhotIds(null);
     setSelected([]);
   };
+
+  const handleShapeCancel = () => setPendingWhotIds(null);
 
   const currentPlayerName = gameState.players.find((p) => p.id === gameState.current_player_id)?.name;
   const isHost = gameState.host_id === clientId;
@@ -108,7 +113,14 @@ export default function GameTable({ socket }) {
         />
       )}
 
-      {pendingWhotIds && <ShapeModal onSelect={handleShapeSelect} />}
+      {pendingWhotIds && (
+        <ShapeModal
+          onSelect={handleShapeSelect}
+          onCancel={handleShapeCancel}
+          deadline={gameState.turn_deadline}
+          totalSeconds={TURN_SECONDS}
+        />
+      )}
 
       <div className="relative z-10 min-h-[100dvh] flex flex-col gap-2 p-3 sm:p-5">
         {/* top HUD: timer bar + Leave (pl-12 leaves room for the mute button) */}
