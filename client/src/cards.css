@@ -34,8 +34,8 @@ button.wc { cursor: pointer; touch-action: manipulation; }
 /* sizes (card width) */
 .wc-xs   { --w: 26px; }
 .wc-sm   { --w: 28px; }
-.wc-hand { --w: 78px; }
-.wc-lg   { --w: 92px; }
+.wc-hand { --w: 64px; }
+.wc-lg   { --w: 80px; }
 .wc-xl   { --w: 200px; }
 @media (min-width: 640px) {
   .wc-sm   { --w: 40px; }
@@ -254,7 +254,7 @@ button.wc:focus-visible { outline: 3px solid rgba(255, 201, 77, 0.55); outline-o
 
 /* ---------- player hand: overlapping fan, corner index always visible ---------- */
 .wc-hand-row {
-  --cw: 78px;
+  --cw: 64px;
   --strip: min(calc(var(--cw) * 0.62), calc((100% - var(--cw)) / max(var(--n) - 1, 1)));
   display: grid;
   justify-content: center;

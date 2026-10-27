@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
-export default function TurnTimer({ deadline, totalSeconds = 30 }) {
+/** Seconds left until the server's turn deadline (null deadline = not ticking). */
+export function useCountdown(deadline, totalSeconds = 30) {
   const [remaining, setRemaining] = useState(totalSeconds);
 
   useEffect(() => {
@@ -11,17 +12,23 @@ export default function TurnTimer({ deadline, totalSeconds = 30 }) {
     return () => clearInterval(id);
   }, [deadline]);
 
-  if (!deadline) return <div className="w-full h-2 bg-green-950 rounded" />;
+  const pct = deadline ? Math.max(0, Math.min(100, (remaining / totalSeconds) * 100)) : 0;
+  return { remaining, pct, active: !!deadline };
+}
 
-  const pct = Math.max(0, Math.min(100, (remaining / totalSeconds) * 100));
-  const color = pct > 50 ? 'bg-green-400' : pct > 20 ? 'bg-yellow-400' : 'bg-red-500';
+/** Three-colour turn timer bar (green, then gold, then red), as in the Stitch table HUD. */
+export default function TurnTimer({ deadline, totalSeconds = 30 }) {
+  const { pct, active } = useCountdown(deadline, totalSeconds);
+  const color = pct > 50 ? 'bg-primary' : pct > 20 ? 'bg-secondary' : 'bg-[#EF4444]';
 
   return (
-    <div className="w-full h-2 bg-green-950 rounded overflow-hidden">
-      <div
-        className={`h-full ${color} transition-[width] duration-200 ease-linear`}
-        style={{ width: `${pct}%` }}
-      />
+    <div className="w-full h-1.5 rounded-full bg-surface-container-lowest/80 backdrop-blur-md overflow-hidden p-[1px]">
+      {active && (
+        <div
+          className={`h-full rounded-full ${color} transition-[width] duration-200 ease-linear`}
+          style={{ width: `${pct}%` }}
+        />
+      )}
     </div>
   );
 }

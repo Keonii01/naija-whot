@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import Card from './Card';
-import OpponentSeat from './OpponentSeat';
+import OpponentPod from './OpponentPod';
 import ShapeModal from './ShapeModal';
 import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
@@ -59,10 +59,10 @@ export default function GameTable({ socket }) {
   const handleCardClick = (card) => {
     if (!isMyTurn) return;
     const idx = selected.indexOf(card.id);
-    if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }   // untap it and anything after
+    if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }
     if (selected.length && comboMates.has(card.id)) { setSelected([...selected, card.id]); return; }
     if (!playableIds.has(card.id)) return;
-    if (combos[card.id]?.length) { setSelected([card.id]); return; }   // has same-number mates: let them choose
+    if (combos[card.id]?.length) { setSelected([card.id]); return; }
     submitPlay([card.id]);
   };
 
@@ -73,11 +73,29 @@ export default function GameTable({ socket }) {
   };
 
   const currentPlayerName = gameState.players.find((p) => p.id === gameState.current_player_id)?.name;
-  const winner = gameState.players.find((p) => p.id === gameState.winner_id);
   const isHost = gameState.host_id === clientId;
 
+  // chip colours for the "Active: ..." pill and the called shape
+  const SUIT_CHIP = {
+    Circle: 'bg-suit-circle text-white',
+    Triangle: 'bg-suit-triangle text-white',
+    Cross: 'bg-suit-cross text-white',
+    Square: 'bg-suit-square text-black/80',
+    Star: 'bg-suit-star text-white',
+  };
+  const top = gameState.top_card;
+  const activeLabel = gameState.pending_shape
+    ? gameState.pending_shape
+    : top.shape === 'Whot' ? 'Whot' : `${top.shape} ${top.number}`;
+  const activeChip = SUIT_CHIP[gameState.pending_shape || top.shape] ?? 'bg-tertiary-container text-white';
+  const handCount = me?.hand.length ?? 0;
+
   return (
-    <div className="min-h-[100dvh] flex flex-col gap-2 p-3">
+    <div className="relative min-h-[100dvh] overflow-hidden font-body text-on-surface bg-gradient-to-b from-primary-container/90 via-surface-container-high to-surface-container-low">
+      {/* felt: soft vignette + a faint dotted watermark */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(131,215,177,0.10),transparent_55%,rgba(0,0,0,0.55))]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.12] bg-[radial-gradient(#83d7b1_1px,transparent_1px)] [background-size:16px_16px]" />
+
       {gameState.game_over && (
         <MatchResult
           gameState={gameState}
@@ -92,143 +110,202 @@ export default function GameTable({ socket }) {
 
       {pendingWhotIds && <ShapeModal onSelect={handleShapeSelect} />}
 
-      {isSpectator && (
-        <div className="text-center bg-blue-900/60 rounded-lg py-1 flex items-center justify-center gap-3">
-          <span>👁️ You are spectating this game</span>
-          <button onClick={leaveRoom} className="text-red-300 underline text-sm">Leave</button>
-        </div>
-      )}
-
-      {/* top bar: timer + Leave (pl-12 leaves room for the mute button) */}
-      <div className="flex items-center gap-3 pl-12">
-        <div className="flex-1">
-          <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
-        </div>
-        {!isSpectator && !gameState.game_over && (
-          <button
-            onClick={() => window.confirm('Leave this game?') && leaveRoom()}
-            className="text-red-300 underline text-sm py-2 px-1 touch-manipulation"
-          >
-            Leave
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-wrap justify-center gap-x-2 gap-y-1">
-        {opponents.map((p) => (
-          <OpponentSeat key={p.id} player={p} isCurrent={gameState.current_player_id === p.id} />
-        ))}
-      </div>
-
-      <div className="flex-1 min-h-[9rem] flex items-center justify-center gap-6">
-        <div className="flex flex-col items-center">
-          <span className="text-sm mb-1 text-green-300">Deck ({gameState.deck_count})</span>
-          <Card faceDown size="lg" />
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-sm mb-1 text-green-300">Top Card</span>
-          <Card card={gameState.top_card} size="lg" disabled />
-          {gameState.pending_shape && (
-            <span className="mt-1 text-xs bg-yellow-500 text-green-900 px-2 py-0.5 rounded font-bold">
-              Shape: {gameState.pending_shape}
-            </span>
-          )}
-          {gameState.pending_pick > 0 && (
-            <span className="mt-1 text-xs bg-red-500 px-2 py-0.5 rounded font-bold">
-              Pending Pick: {gameState.pending_pick}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="text-center">
-        <p className="text-sm text-green-200 min-h-[2.5rem] leading-tight flex items-center justify-center">
-          {gameState.last_action}
-        </p>
-        <p className={`font-bold ${isMyTurn ? 'text-yellow-300' : 'text-green-400'}`}>
-          {isSpectator ? `${currentPlayerName}'s turn` : isMyTurn ? 'Your turn!' : `Waiting for ${currentPlayerName}...`}
-        </p>
-      </div>
-
-      {!isSpectator && (
-        <div className="bg-green-800/60 rounded-xl p-3">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="font-semibold">Your Hand ({me?.hand.length ?? 0})</span>
+      <div className="relative z-10 min-h-[100dvh] flex flex-col gap-2 p-3 sm:p-5">
+        {/* top HUD: timer bar + Leave (pl-12 leaves room for the mute button) */}
+        <div className="flex items-center gap-3 pl-12 min-h-10">
+          <div className="flex-1 max-w-xl mx-auto">
+            <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
+          </div>
+          {!isSpectator && !gameState.game_over && (
             <button
-              onClick={drawCard}
-              disabled={!isMyTurn}
-              className="bg-yellow-500 disabled:opacity-40 text-green-900 font-bold px-5 min-h-[44px] rounded-lg touch-manipulation"
+              onClick={() => window.confirm('Leave this game?') && leaveRoom()}
+              className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/10 border border-white/25 text-on-surface hover:bg-white/20 touch-manipulation"
             >
-              Draw Card
+              Leave
             </button>
+          )}
+        </div>
+
+        {isSpectator && (
+          <div className="mx-auto w-full max-w-md text-center text-sm rounded-full bg-tertiary-container/40 backdrop-blur-md py-1 flex items-center justify-center gap-3">
+            <span>👁️ You are spectating this game</span>
+            <button onClick={leaveRoom} className="underline text-on-surface">Leave</button>
+          </div>
+        )}
+
+        {/* live action banner */}
+        <div className="mx-auto w-full max-w-md flex items-center gap-2 rounded-2xl bg-surface-container-high/85 backdrop-blur-xl px-3 py-1.5 shadow-lg">
+          <span className="shrink-0 w-2 h-2 rounded-full bg-secondary" />
+          <p className="text-sm font-medium leading-tight min-h-[2.25rem] flex items-center">{gameState.last_action}</p>
+        </div>
+
+        {/* opponents */}
+        <div className="flex flex-wrap items-start justify-center gap-x-2 sm:gap-x-3 gap-y-2 rounded-xl bg-surface-container-high/60 backdrop-blur-md p-1.5 sm:bg-transparent sm:backdrop-blur-none sm:p-0">
+          {opponents.map((p) => (
+            <OpponentPod
+              key={p.id}
+              player={p}
+              isCurrent={gameState.current_player_id === p.id}
+              isHost={p.id === gameState.host_id}
+              deadline={gameState.turn_deadline}
+              totalSeconds={TURN_SECONDS}
+              compact={opponents.length > 3}
+            />
+          ))}
+        </div>
+
+        {/* centre arena: rule chips, deck, discard, turn callout */}
+        <div className="flex-1 min-h-[11rem] flex flex-col items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-1.5 flex-wrap min-h-[1.5rem]">
+            {gameState.pending_pick > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EF4444] text-white shadow-md">
+                Pick {gameState.pending_pick} Active
+              </span>
+            )}
+            {gameState.pending_shape && (
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold shadow-md ${activeChip}`}>
+                Shape: {gameState.pending_shape}
+              </span>
+            )}
           </div>
 
-          {me?.hand.length === 1 && !gameState.game_over && (
-            me.last_card_called ? (
-              <div className="mb-2 rounded-lg bg-green-700 text-yellow-300 font-bold text-center py-3">
-                ✓ Last Card called
+          <div className="flex items-start justify-center gap-6 sm:gap-14">
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-xl translate-x-1 translate-y-2 bg-surface-container-highest opacity-70" />
+                <div className="absolute inset-0 rounded-xl translate-x-0.5 translate-y-1 bg-primary-container opacity-85" />
+                <Card faceDown size="lg" />
               </div>
-            ) : (
-              <button
-                onClick={lastCard}
-                className="lastcard-glow touch-manipulation mb-2 w-full min-h-[52px] rounded-lg bg-red-600 active:bg-red-700 text-white text-lg font-extrabold tracking-wide"
-              >
-                LAST CARD!
-              </button>
-            )
-          )}
-
-          {selected.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-2">
-              <span className="basis-full text-center text-sm text-green-200">
-                {selected.length} selected{comboMates.size > selected.length - 1 ? ' — tap more of the same number to add' : ''}
+              <span className="text-xs px-3 py-0.5 rounded-full bg-surface-container-high/90 backdrop-blur-md text-on-surface shadow">
+                Deck: {gameState.deck_count} left
               </span>
-              <button
-                onClick={() => submitPlay(selected)}
-                className="bg-yellow-500 text-green-900 font-bold px-4 min-h-[44px] rounded-lg touch-manipulation"
-              >
-                Play {selected.length > 1 ? `${selected.length} cards` : 'this card'}
-              </button>
-              <button onClick={() => setSelected([])} className="text-green-300 underline text-sm py-2 px-2 touch-manipulation">
-                Cancel
-              </button>
             </div>
-          )}
+
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-xl bg-white/70 -rotate-[7deg] translate-y-0.5 opacity-60" />
+                <div className="relative rotate-2">
+                  <Card card={top} size="lg" />
+                </div>
+              </div>
+              <span className={`text-xs font-semibold px-3 py-0.5 rounded-full shadow ${activeChip}`}>
+                Active: {activeLabel}
+              </span>
+            </div>
+          </div>
 
           <div
-            className="wc-hand-row"
-            style={{
-              '--n': Math.max(me?.hand.length ?? 1, 1),
-              gridTemplateColumns:
-                (me?.hand.length ?? 0) > 1
-                  ? `repeat(${me.hand.length - 1}, var(--strip)) var(--cw)`
-                  : 'var(--cw)',
-            }}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-1 backdrop-blur-md ${
+              isMyTurn
+                ? 'bg-secondary/15 text-secondary shadow-[0_0_24px_rgba(244,191,68,0.25)]'
+                : 'bg-surface-container-lowest/60 text-on-surface-variant'
+            }`}
           >
-            {me?.hand.map((card) => {
-              const pos = selected.indexOf(card.id);
-              return (
-                <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : ''}`}>
-                  {pos !== -1 && (
-                    <span
-                      className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
-                      style={{ top: 'calc(var(--cw) * -0.2 - 10px)' }}
-                    >
-                      {pos + 1}
-                    </span>
-                  )}
-                  <Card
-                    card={card}
-                    size="hand"
-                    selected={pos !== -1}
-                    onClick={isMyTurn ? () => handleCardClick(card) : undefined}
-                  />
-                </div>
-              );
-            })}
+            {isMyTurn && <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />}
+            <span className="font-display font-bold text-sm sm:text-lg tracking-tight">
+              {isSpectator ? `${currentPlayerName}'s turn` : isMyTurn ? 'Your turn!' : `Waiting for ${currentPlayerName}…`}
+            </span>
           </div>
         </div>
-      )}
+
+        {/* hand dock */}
+        {!isSpectator && (
+          <div className="rounded-2xl bg-surface-container-lowest/85 backdrop-blur-2xl p-2.5 sm:p-4 shadow-[0_-8px_28px_rgba(0,0,0,0.5)] flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            {/* who you are + hand size */}
+            <div className="flex items-center justify-between sm:justify-start gap-3 sm:shrink-0 px-1">
+              <div className="hidden sm:flex w-10 h-10 rounded-full bg-primary text-on-primary items-center justify-center font-display font-bold">
+                {(me?.name ?? '?').charAt(0).toUpperCase()}
+              </div>
+              <div className="flex flex-col">
+                <span className="hidden sm:block font-display font-semibold">{me?.name} (You)</span>
+                <span className="text-[11px] sm:text-xs text-primary font-semibold">
+                  <span className="sm:hidden">Your Hand ({handCount} {handCount === 1 ? 'card' : 'cards'})</span>
+                  <span className="hidden sm:inline">{handCount} {handCount === 1 ? 'Card' : 'Cards'} in Hand</span>
+                </span>
+              </div>
+              {isMyTurn && <span className="sm:hidden text-[10px] font-bold text-secondary">Select card to play</span>}
+            </div>
+
+            {/* cards (and the combo bar) */}
+            <div className="flex-1 min-w-0">
+              {selected.length > 0 && (
+                <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-1">
+                  <span className="basis-full text-center text-sm text-on-surface-variant">
+                    {selected.length} selected{comboMates.size > selected.length - 1 ? ' — tap more of the same number to add' : ''}
+                  </span>
+                  <button
+                    onClick={() => submitPlay(selected)}
+                    className="bg-gold hover:bg-gold-hover text-emerald-deep font-display font-bold px-5 min-h-[44px] rounded-xl touch-manipulation"
+                  >
+                    Play {selected.length > 1 ? `${selected.length} cards` : 'this card'}
+                  </button>
+                  <button onClick={() => setSelected([])} className="text-on-surface-variant underline text-sm py-2 px-2 touch-manipulation">
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              <div
+                className="wc-hand-row"
+                style={{
+                  '--n': Math.max(handCount, 1),
+                  gridTemplateColumns:
+                    handCount > 1 ? `repeat(${handCount - 1}, var(--strip)) var(--cw)` : 'var(--cw)',
+                }}
+              >
+                {me?.hand.map((card) => {
+                  const pos = selected.indexOf(card.id);
+                  return (
+                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : ''}`}>
+                      {pos !== -1 && (
+                        <span
+                          className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                          style={{ top: 'calc(var(--cw) * -0.2 - 10px)' }}
+                        >
+                          {pos + 1}
+                        </span>
+                      )}
+                      <Card
+                        card={card}
+                        size="hand"
+                        selected={pos !== -1}
+                        onClick={isMyTurn ? () => handleCardClick(card) : undefined}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* actions */}
+            <div className="flex flex-col gap-2 sm:w-48 sm:shrink-0">
+              {handCount === 1 && !gameState.game_over && (
+                me.last_card_called ? (
+                  <div className="rounded-xl bg-primary-container/60 text-secondary font-bold text-center py-3">
+                    ✓ Last Card called
+                  </div>
+                ) : (
+                  <button
+                    onClick={lastCard}
+                    className="lastcard-glow touch-manipulation w-full min-h-[52px] rounded-xl bg-[#EF4444] active:bg-red-700 text-white text-lg font-extrabold tracking-wide"
+                  >
+                    LAST CARD!
+                  </button>
+                )
+              )}
+              <button
+                onClick={drawCard}
+                disabled={!isMyTurn}
+                className="w-full min-h-[48px] rounded-xl bg-gold hover:bg-gold-hover text-emerald-deep font-display font-bold shadow-[0_4px_14px_rgba(255,201,77,0.35)] disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2 touch-manipulation"
+              >
+                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M12 8v8M8 12h8" /></svg>
+                <span className="sm:hidden">Draw Card from Market</span>
+                <span className="hidden sm:inline">Draw Card</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
