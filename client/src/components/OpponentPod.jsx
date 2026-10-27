@@ -60,7 +60,7 @@ export default function OpponentPod({ player, isCurrent, isHost, deadline, total
       </div>
 
       {n > 0 && (
-        <div className="hidden sm:flex -space-x-4 mt-0.5">
+        <div className="pod-fan -space-x-4 mt-0.5">
           {Array.from({ length: shown }).map((_, i) => (
             <div key={i} style={{ transform: `rotate(${(i - (shown - 1) / 2) * 8}deg)` }}>
               <Card faceDown size="sm" />

@@ -32,16 +32,20 @@
 button.wc { cursor: pointer; touch-action: manipulation; }
 
 /* sizes (card width) */
-.wc-xs   { --w: 26px; }
-.wc-sm   { --w: 28px; }
-.wc-hand { --w: 64px; }
-.wc-lg   { --w: 80px; }
-.wc-xl   { --w: 200px; }
+:root { --sm-w: 28px; --hand-w: 64px; --lg-w: 80px; }
+/* on bigger screens the table cards scale with the window HEIGHT, so the whole table fits without scrolling */
 @media (min-width: 640px) {
-  .wc-sm   { --w: 40px; }
-  .wc-hand { --w: 100px; }
-  .wc-lg   { --w: 128px; }
+  :root {
+    --sm-w: clamp(30px, 4.6vh, 40px);
+    --hand-w: clamp(56px, 10.2vh, 100px);
+    --lg-w: clamp(72px, 13vh, 128px);
+  }
 }
+.wc-xs   { --w: 26px; }
+.wc-sm   { --w: var(--sm-w); }
+.wc-hand { --w: var(--hand-w); }
+.wc-lg   { --w: var(--lg-w); }
+.wc-xl   { --w: 200px; }
 .wc-xs, .wc-sm, .wc-hand { box-shadow: 0 8px 18px -5px rgba(0, 0, 0, 0.45), 0 2px 6px -1px rgba(0, 0, 0, 0.25); }
 
 /* interaction: hover lift (desktop) and the "selected" state (Level 3 in DESIGN.md) */
@@ -254,13 +258,16 @@ button.wc:focus-visible { outline: 3px solid rgba(255, 201, 77, 0.55); outline-o
 
 /* ---------- player hand: overlapping fan, corner index always visible ---------- */
 .wc-hand-row {
-  --cw: 64px;
+  --cw: var(--hand-w);
   --strip: min(calc(var(--cw) * 0.62), calc((100% - var(--cw)) / max(var(--n) - 1, 1)));
   display: grid;
   justify-content: center;
   align-items: start;
   padding-top: calc(var(--cw) * 0.34);              /* room for the lifted card */
 }
-@media (min-width: 640px) { .wc-hand-row { --cw: 100px; } }
 .wc-hand-slot { position: relative; width: var(--cw); }
 .wc-hand-slot.is-selected { z-index: 5; }
+
+/* opponents' fan of card backs: only when there is plenty of height */
+.pod-fan { display: none; }
+@media (min-width: 640px) and (min-height: 961px) { .pod-fan { display: flex; } }
