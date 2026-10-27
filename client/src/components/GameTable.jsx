@@ -3,6 +3,7 @@ import Card from './Card';
 import OpponentSeat from './OpponentSeat';
 import ShapeModal from './ShapeModal';
 import TurnTimer from './TurnTimer';
+import MatchResult from './MatchResult';
 import { sounds } from '../utils/sounds';
 
 const TURN_SECONDS = 30;
@@ -78,55 +79,15 @@ export default function GameTable({ socket }) {
   return (
     <div className="min-h-[100dvh] flex flex-col gap-2 p-3">
       {gameState.game_over && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white text-green-900 rounded-xl p-6 w-full max-w-sm max-h-[90dvh] overflow-y-auto text-center">
-            <h2 className="text-2xl font-bold mb-1">
-              {winner
-                ? (winner.id === clientId ? '🏆 You win!' : `🏆 ${winner.name} wins!`)
-                : '🤝 It’s a tie!'}
-            </h2>
-            <p className="text-sm text-green-800 mb-4">
-              {gameState.end_reason === 'market'
-                ? 'The market is finished. Lowest card total wins.'
-                : gameState.end_reason === 'forfeit'
-                  ? 'Everyone else left the table.'
-                  : 'First to empty their hand.'}
-            </p>
-
-            {gameState.end_reason !== 'forfeit' && (
-              <ol className="text-left mb-4 space-y-1">
-                {(gameState.ranking ?? []).map((r) => (
-                  <li
-                    key={r.id}
-                    className={`flex justify-between gap-3 rounded px-3 py-1 ${r.id === clientId ? 'bg-yellow-100 font-semibold' : 'bg-green-50'}`}
-                  >
-                    <span className="truncate">{r.rank}. {r.name}</span>
-                    <span className="whitespace-nowrap">{r.points} pts · {r.cards} {r.cards === 1 ? 'card' : 'cards'}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
-
-            <div className="flex flex-col gap-2">
-              {isHost && !isSpectator && (
-                <button onClick={rematch} className="bg-yellow-500 text-green-900 font-bold px-4 py-2 rounded">
-                  Play again
-                </button>
-              )}
-              {!isHost && !isSpectator && (
-                <p className="text-sm text-green-800">The host can start a rematch…</p>
-              )}
-              {!isSpectator && (
-                <button onClick={returnToLobby} className="bg-green-700 text-white px-4 py-2 rounded">
-                  Back to waiting room
-                </button>
-              )}
-              <button onClick={leaveRoom} className="text-red-600 underline text-sm mt-1">
-                Leave room
-              </button>
-            </div>
-          </div>
-        </div>
+        <MatchResult
+          gameState={gameState}
+          clientId={clientId}
+          isHost={isHost}
+          isSpectator={isSpectator}
+          onPlayAgain={rematch}
+          onBackToRoom={returnToLobby}
+          onLeave={leaveRoom}
+        />
       )}
 
       {pendingWhotIds && <ShapeModal onSelect={handleShapeSelect} />}
@@ -234,24 +195,37 @@ export default function GameTable({ socket }) {
             </div>
           )}
 
-          <div className="flex flex-wrap justify-center gap-1.5 sm:gap-2 max-h-[30dvh] overflow-y-auto px-2 pt-4 pb-1">
-            {me?.hand.map((card) => (
-              <div
-                key={card.id}
-                className={`relative transition-transform ${selected.includes(card.id) ? '-translate-y-3 ring-2 ring-yellow-400 rounded-lg' : ''}`}
-              >
-                {selected.includes(card.id) && (
-                  <span className="absolute -top-2 -right-2 z-10 bg-yellow-400 text-green-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {selected.indexOf(card.id) + 1}
-                  </span>
-                )}
-                <Card
-                  card={card}
-                  onClick={() => handleCardClick(card)}
-                  disabled={!isMyTurn}
-                />
-              </div>
-            ))}
+          <div
+            className="wc-hand-row"
+            style={{
+              '--n': Math.max(me?.hand.length ?? 1, 1),
+              gridTemplateColumns:
+                (me?.hand.length ?? 0) > 1
+                  ? `repeat(${me.hand.length - 1}, var(--strip)) var(--cw)`
+                  : 'var(--cw)',
+            }}
+          >
+            {me?.hand.map((card) => {
+              const pos = selected.indexOf(card.id);
+              return (
+                <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : ''}`}>
+                  {pos !== -1 && (
+                    <span
+                      className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                      style={{ top: 'calc(var(--cw) * -0.2 - 10px)' }}
+                    >
+                      {pos + 1}
+                    </span>
+                  )}
+                  <Card
+                    card={card}
+                    size="hand"
+                    selected={pos !== -1}
+                    onClick={isMyTurn ? () => handleCardClick(card) : undefined}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

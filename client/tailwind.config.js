@@ -1,5 +1,45 @@
+/** Design tokens from the Stitch "Lagos Emerald Frosted Game" DESIGN.md */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
-  theme: { extend: {} },
+  theme: {
+    extend: {
+      colors: {
+        surface: '#00170f',
+        'surface-dim': '#00170f',
+        'surface-bright': '#004231',
+        'surface-container-lowest': '#00120b',
+        'surface-container-low': '#002117',
+        'surface-container': '#00251a',
+        'surface-container-high': '#003123',
+        'surface-container-highest': '#003d2d',
+        'on-surface': '#b0f0d6',
+        'on-surface-variant': '#bec9c1',
+        outline: '#88938c',
+        'outline-variant': '#3f4943',
+        primary: '#83d7b1',
+        'on-primary': '#003826',
+        'primary-container': '#0b6e4f',
+        'on-primary-container': '#98edc6',
+        secondary: '#f4bf44',
+        'on-secondary': '#402d00',
+        'secondary-container': '#b88904',
+        'on-secondary-container': '#372700',
+        'secondary-fixed': '#ffdf9f',
+        tertiary: '#ddb8ff',
+        'tertiary-container': '#8823df',
+        error: '#ffb4ab',
+        'error-container': '#93000a',
+        // brand + suit tokens
+        emerald: { DEFAULT: '#0B6E4F', deep: '#064E3B' },
+        gold: { DEFAULT: '#FFC94D', hover: '#FFB703' },
+        suit: { circle: '#2563EB', triangle: '#16A34A', cross: '#DC2626', square: '#F59E0B', star: '#9333EA' },
+      },
+      fontFamily: {
+        display: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+        body: ['Inter', 'system-ui', 'sans-serif'],
+        num: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+      },
+    },
+  },
   plugins: [],
 };
