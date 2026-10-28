@@ -83,7 +83,7 @@ export default function Lobby({ socket }) {
           <div aria-hidden="true" className="absolute inset-x-8 top-1 h-px bg-white/20" />
 
           <Logo className="mx-auto h-24 w-24 drop-shadow-[0_8px_20px_rgba(0,0,0,0.45)]" />
-          <h1 className="mt-2 font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-white">Welcome to Naija Whot</h1>
+          <h1 className="mt-2 font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-white [text-wrap:balance]">Welcome to Naija Whot</h1>
           <p className="mx-auto mt-2 max-w-xs text-sm sm:text-base text-on-surface">
             Oya, gather your people. Make a room, share the code, and play Whot together, live.
           </p>
@@ -95,7 +95,7 @@ export default function Lobby({ socket }) {
             }`}
           >
             <span className={`h-2 w-2 rounded-full ${connected ? 'bg-primary' : 'animate-pulse bg-secondary'}`} />
-            {connected ? 'Connected' : 'Waking up the server… this can take a minute'}
+            {connected ? 'Connected' : 'Connecting to the server…'}
           </div>
 
           <label className="mt-6 block text-left">
@@ -159,6 +159,6 @@ export default function Lobby({ socket }) {
           </div>
         </form>
       </div>
-    </div>
+ </div>
   );
 }
