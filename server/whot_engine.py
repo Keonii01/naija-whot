@@ -194,6 +194,7 @@ class WhotGame:
         self.deck = player.hand + self.deck          # bottom of the market
         self.players.pop(idx)
         if len(self.players) == 1:
+            self.current_idx = 0                     # only one seat is left: keep the index valid
             self._finish("forfeit", self.players[0])
             self.last_action = f"{player.name} {note}. {self.players[0].name} wins by default!"
             return

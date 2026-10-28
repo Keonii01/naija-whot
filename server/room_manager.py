@@ -280,8 +280,8 @@ class RoomManager:
     # ---------------- Turn Timer ----------------
 
     async def start_turn_timer(self, room):
-        if room.turn_task:
-            room.turn_task.cancel()
+        if room.turn_task and room.turn_task is not asyncio.current_task():
+            room.turn_task.cancel()                  # never cancel the timer task we are running inside
         deadline = time.time() + TURN_SECONDS
         room.turn_deadline = deadline
         room.turn_task = asyncio.create_task(self._turn_timeout_watcher(room, deadline))
@@ -311,9 +311,9 @@ class RoomManager:
         await self._after_action(room)
 
     def _stop_timer(self, room):
-        if room.turn_task:
+        if room.turn_task and room.turn_task is not asyncio.current_task():
             room.turn_task.cancel()
-            room.turn_task = None
+        room.turn_task = None
         room.turn_deadline = None
 
     # ---------------- Message Handling ----------------
