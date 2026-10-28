@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useWhotSocket } from './hooks/useWhotSocket';
+import Splash from './components/Splash';
 import Lobby from './components/Lobby';
 import GameTable from './components/GameTable';
 import SpectatorTable from './components/SpectatorTable';
@@ -9,6 +10,7 @@ export default function App() {
   const socket = useWhotSocket();
   const inGame = socket.gameState !== null;
   const [muted, setMutedState] = useState(isMuted());
+  const [splashDone, setSplashDone] = useState(false);
 
   const toggleMute = () => {
     const next = !muted;
@@ -18,6 +20,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-green-900 text-white font-sans relative">
+      {!splashDone && <Splash ready={socket.connected} onDone={() => setSplashDone(true)} />}
       <button
         onClick={toggleMute}
         className="fixed top-4 left-4 z-50 bg-green-800 w-10 h-10 rounded-full flex items-center justify-center"
