@@ -24,6 +24,7 @@ export function useWhotSocket() {
   const [gameOver, setGameOver] = useState(null);
 
   const wsRef = useRef(null);
+  const clientIdRef = useRef(null);
   const reconnectTimerRef = useRef(null);
   const manualCloseRef = useRef(false);
 
@@ -36,7 +37,8 @@ export function useWhotSocket() {
       const storedRoom = localStorage.getItem('whot_room_code');
       const storedName = localStorage.getItem('whot_player_name');
       if (storedRoom) {
-        ws.send(JSON.stringify({ type: 'rejoin', room_code: storedRoom, player_name: storedName }));
+        const spectate = localStorage.getItem('whot_spectating') === '1';
+        ws.send(JSON.stringify({ type: 'rejoin', room_code: storedRoom, player_name: storedName, spectate }));
       }
     };
 
@@ -53,11 +55,17 @@ export function useWhotSocket() {
       const msg = JSON.parse(event.data);
       switch (msg.type) {
         case 'welcome':
+          clientIdRef.current = msg.player_id;
           setClientId(msg.player_id);
           break;
         case 'room_update':
           setRoom(msg);
           localStorage.setItem('whot_room_code', msg.room_code);
+          // remember whether this browser is watching, so a refresh keeps the same role
+          localStorage.setItem(
+            'whot_spectating',
+            msg.players.some((p) => p.id === clientIdRef.current) ? '0' : '1'
+          );
           break;
         case 'game_state':
           setGameState(msg.state);
@@ -79,6 +87,7 @@ export function useWhotSocket() {
           break;
         case 'kicked':
           localStorage.removeItem('whot_room_code');
+          localStorage.removeItem('whot_spectating');
           setRoom(null);
           setGameState(null);
           setError(msg.message);
@@ -86,6 +95,7 @@ export function useWhotSocket() {
           break;
         case 'rejoin_failed':
           localStorage.removeItem('whot_room_code');
+          localStorage.removeItem('whot_spectating');
           setRoom(null);
           setGameState(null);
           break;
@@ -112,12 +122,14 @@ export function useWhotSocket() {
 
   const createRoom = (name) => {
     localStorage.setItem('whot_player_name', name);
+    localStorage.setItem('whot_spectating', '0');
     send({ type: 'create_room', player_name: name });
   };
 
-  const joinRoom = (code, name) => {
+  const joinRoom = (code, name, spectate = false) => {
     localStorage.setItem('whot_player_name', name);
-    send({ type: 'join_room', room_code: code, player_name: name });
+    localStorage.setItem('whot_spectating', spectate ? '1' : '0');
+    send({ type: 'join_room', room_code: code, player_name: name, spectate });
   };
 
   const leaveRoom = () => {
@@ -138,6 +150,7 @@ export function useWhotSocket() {
     joinRoom,
     leaveRoom,
     startGame: () => send({ type: 'start_game' }),
+    takeSeat: () => send({ type: 'take_seat' }),
     playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
     drawCard: () => send({ type: 'draw_card' }),

@@ -36,7 +36,7 @@ function Seat({ player, isHost, isYou }) {
 
 function EmptySeat({ n }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/20 bg-surface-container-lowest/40 px-2 py-3 min-h-[120px] sm:min-h-[128px]">
+    <div className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/20 bg-surface-container-lowest/40 px-1 py-3 min-h-[104px] sm:px-2 sm:min-h-[128px]">
       <div className="flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full border border-dashed border-white/20 font-display text-lg font-bold text-white/30">
         {n}
       </div>
@@ -46,10 +46,12 @@ function EmptySeat({ n }) {
 }
 
 export default function WaitingRoom({ socket }) {
-  const { room, clientId, startGame, leaveRoom } = socket;
+  const { room, clientId, startGame, takeSeat, leaveRoom } = socket;
   const [copied, setCopied] = useState(false);
 
   const { players, host_id, room_code, last_result } = room;
+  const watchers = room.spectators ?? 0;
+  const isWatcher = !players.some((p) => p.id === clientId);
   const isHost = host_id === clientId;
   const hostName = players.find((p) => p.id === host_id)?.name ?? 'the host';
   const count = players.length;
@@ -89,6 +91,12 @@ export default function WaitingRoom({ socket }) {
               <span className="text-xs font-bold uppercase tracking-wider text-primary">Waiting Room</span>
               <span className="h-1.5 w-1.5 rounded-full bg-on-surface-variant" />
               <span className="text-xs font-bold text-on-surface-variant">{count}/{MAX_SEATS} players</span>
+              {watchers > 0 && (
+                <>
+                  <span className="h-1.5 w-1.5 rounded-full bg-on-surface-variant" />
+                  <span className="text-xs font-bold text-on-surface-variant">{watchers} watching</span>
+                </>
+              )}
             </div>
             {last_result && (
               <span className="rounded-full bg-secondary/15 px-3 py-1.5 text-xs font-bold text-secondary">
@@ -142,7 +150,7 @@ export default function WaitingRoom({ socket }) {
             <h2 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Player seats</h2>
             <span className="text-[11px] font-semibold text-on-surface-variant">Need at least 2 to start</span>
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-x-1.5 gap-y-4 sm:gap-x-3">
+          <div className="mt-3 grid grid-cols-4 gap-x-1.5 gap-y-3 sm:gap-x-3 sm:gap-y-4">
             {players.map((p) => (
               <Seat key={p.id} player={p} isHost={p.id === host_id} isYou={p.id === clientId} />
             ))}
@@ -153,7 +161,22 @@ export default function WaitingRoom({ socket }) {
 
           {/* actions */}
           <div className="mt-6 flex flex-col gap-3">
-            {isHost ? (
+            {isWatcher ? (
+              <>
+                <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 py-2 text-center font-display text-sm sm:text-base font-bold text-on-surface">
+                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
+                  You are watching. The game shows up here when the host starts it.
+                </div>
+                <button
+                  type="button"
+                  onClick={takeSeat}
+                  disabled={count >= MAX_SEATS}
+                  className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-gold font-display text-base font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
+                >
+                  {count >= MAX_SEATS ? 'Room is full' : 'Take a seat and play'}
+                </button>
+              </>
+            ) : isHost ? (
               <button
                 type="button"
                 onClick={startGame}

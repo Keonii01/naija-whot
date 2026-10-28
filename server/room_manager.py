@@ -1,7 +1,7 @@
 import asyncio
 import json
 import random
-## import string
+import string
 import time
 import uuid
 
@@ -13,9 +13,16 @@ HOST_GRACE = 15      # seconds before a disconnected host hands over
 LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
 AFK_LIMIT = 3        # consecutive missed turns before a player is removed
+MAX_PLAYERS = 8
+MAX_SPECTATORS = 8   # watchers per room
+NAME_MAX = 16
 
 # no 0/O/1/I so codes are never misread when typed or read aloud
 CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def clean_name(raw, default):
+    return (str(raw or "").strip()[:NAME_MAX]) or default
 
 def gen_room_code():
     return ''.join(random.choices(CODE_CHARS, k=5))
@@ -61,6 +68,7 @@ class Room:
             "host_id": self.host_id,
             "started": self.started,
             "players": [{"id": pid, "name": p.name} for pid, p in self.players.items()],
+            "spectators": len(self.spectators),
             "last_result": self.last_result,
         }
 
@@ -105,6 +113,9 @@ class RoomManager:
                 room.remove_spectator(client_id)
         elif client_id in room.players:
             room.remove_player(client_id)
+            await self.broadcast_lobby(room)
+        elif client_id in room.spectators:
+            room.remove_spectator(client_id)
             await self.broadcast_lobby(room)
         if client_id == room.host_id:
             self._schedule_host_check(room)
@@ -234,12 +245,6 @@ class RoomManager:
         for pid in list(room.order):
             if pid not in staying:
                 room.remove_player(pid)                  # gone players don't carry over
-        for sid, name in list(room.spectators.items()):  # spectators join the next game if there is room
-            if len(room.order) >= 8:
-                break
-            if sid in self.connections:
-                room.add_player(sid, name)
-                room.remove_spectator(sid)
         self._stop_timer(room)
         room.game = None
         room.started = False
@@ -321,7 +326,7 @@ class RoomManager:
             while code in self.rooms:
                 code = gen_room_code()
             room = Room(code, client_id)
-            room.add_player(client_id, msg.get("player_name", "Player"))
+            room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
             self.rooms[code] = room
             self.player_rooms[client_id] = code
             await self.broadcast_lobby(room)
@@ -332,23 +337,31 @@ class RoomManager:
             if not room:
                 await self.send(client_id, {"type": "error", "message": "Room not found"})
                 return
-            self._touch(room)        
+            self._touch(room)
 
-            if room.started:
-                room.add_spectator(client_id, msg.get("player_name", "Spectator"))
+            # watching is always allowed (waiting room or running game); a running game only allows watching
+            if msg.get("spectate") or room.started:
+                if client_id in room.players:
+                    return
+                if client_id not in room.spectators and len(room.spectators) >= MAX_SPECTATORS:
+                    await self.send(client_id, {"type": "error", "message": "Too many people are watching this room"})
+                    return
+                pname = clean_name(msg.get("player_name"), "Spectator")
+                room.add_spectator(client_id, pname)
                 self.player_rooms[client_id] = code
-                await self.send_game_state_to(room, client_id)
-                await self.broadcast(room, {
-                    "type": "info",
-                    "message": f"{msg.get('player_name', 'Someone')} joined as spectator"
-                })
+                if room.started and room.game:
+                    await self.send(client_id, room.lobby_state())
+                    await self.send_game_state_to(room, client_id)
+                    await self.broadcast(room, {"type": "info", "message": f"{pname} joined as spectator"})
+                else:
+                    await self.broadcast_lobby(room)
                 return
 
-            if len(room.players) >= 8:
-                await self.send(client_id, {"type": "error", "message": "Room full (max 8 players)"})
+            if len(room.players) >= MAX_PLAYERS:
+                await self.send(client_id, {"type": "error", "message": "Room full (max 8 players). You can still watch."})
                 return
 
-            room.add_player(client_id, msg.get("player_name", "Player"))
+            room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
             self.player_rooms[client_id] = code
             await self.broadcast_lobby(room)
 
@@ -368,15 +381,45 @@ class RoomManager:
                     p.connected = True
                     await self.broadcast_game_state(room)
                 else:
-                    room.add_spectator(client_id, msg.get("player_name", "Spectator"))
+                    if client_id not in room.spectators:
+                        if len(room.spectators) >= MAX_SPECTATORS:
+                            await self.send(client_id, {"type": "rejoin_failed"})
+                            return
+                        room.add_spectator(client_id, clean_name(msg.get("player_name"), "Spectator"))
+                    await self.send(client_id, room.lobby_state())
                     await self.send_game_state_to(room, client_id)
             else:
-                if client_id not in room.players:
-                    if len(room.players) >= 8:
+                if client_id in room.players:
+                    pass
+                elif client_id in room.spectators or msg.get("spectate"):
+                    if client_id not in room.spectators:
+                        if len(room.spectators) >= MAX_SPECTATORS:
+                            await self.send(client_id, {"type": "rejoin_failed"})
+                            return
+                        room.add_spectator(client_id, clean_name(msg.get("player_name"), "Spectator"))
+                else:
+                    if len(room.players) >= MAX_PLAYERS:
                         await self.send(client_id, {"type": "rejoin_failed"})
                         return
-                    room.add_player(client_id, msg.get("player_name", "Player"))
+                    room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
                 await self.broadcast_lobby(room)
+
+        elif mtype == "take_seat":
+            # a watcher becomes a player (waiting room only)
+            room = self._get_room(client_id)
+            if not room or client_id not in room.spectators:
+                return
+            if room.started:
+                await self.send(client_id, {"type": "error", "message": "Wait for this game to finish, then take a seat"})
+                return
+            if len(room.players) >= MAX_PLAYERS:
+                await self.send(client_id, {"type": "error", "message": "Room full (max 8 players)"})
+                return
+            name = room.spectators[client_id]
+            room.remove_spectator(client_id)
+            room.add_player(client_id, name)
+            self._pick_new_host(room)
+            await self.broadcast_lobby(room)
 
         elif mtype == "start_game":
             room = self._get_room(client_id)
@@ -455,6 +498,7 @@ class RoomManager:
                     room.remove_spectator(client_id)
             else:
                 room.remove_player(client_id)
+                room.remove_spectator(client_id)
             if client_id == room.host_id:
                 self._pick_new_host(room)                # chose to leave: hand over at once
             if self._room_is_empty(room):
