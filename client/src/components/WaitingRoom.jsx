@@ -14,20 +14,20 @@ function colorFor(id) {
 function Seat({ player, isHost, isYou }) {
   const color = colorFor(player.id);
   return (
-    <div className="relative flex flex-col items-center gap-1.5 rounded-2xl bg-surface-container-high/80 px-2 py-3 shadow-lg min-w-0">
+    <div className="relative flex flex-col items-center gap-1 sm:gap-1.5 rounded-2xl bg-surface-container-high/80 px-1 pt-5 pb-2.5 sm:px-2 sm:pb-3 shadow-lg min-w-0">
       {isHost && (
         <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-on-secondary">
           HOST
         </span>
       )}
       <div
-        className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full font-display text-xl font-extrabold text-white shadow-inner ring-2 ring-white/20"
+        className="flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full font-display text-xl font-extrabold text-white shadow-inner ring-2 ring-white/20"
         style={{ backgroundColor: color }}
       >
         {(player.name || '?').charAt(0).toUpperCase()}
       </div>
-      <span className="w-full truncate text-center font-display text-sm font-semibold text-white">{player.name}</span>
-      <span className={`text-[11px] font-semibold ${isYou ? 'text-secondary' : 'text-on-surface-variant'}`}>
+      <span className="w-full truncate text-center font-display text-xs sm:text-sm font-semibold text-white">{player.name}</span>
+      <span className={`text-[10px] sm:text-[11px] font-semibold ${isYou ? 'text-secondary' : 'hidden sm:block text-on-surface-variant'}`}>
         {isYou ? 'You' : 'In the room'}
       </span>
     </div>
@@ -36,11 +36,11 @@ function Seat({ player, isHost, isYou }) {
 
 function EmptySeat({ n }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/20 bg-surface-container-lowest/40 px-2 py-3 min-h-[116px] sm:min-h-[124px]">
-      <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full border border-dashed border-white/20 font-display text-lg font-bold text-white/30">
+    <div className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/20 bg-surface-container-lowest/40 px-2 py-3 min-h-[120px] sm:min-h-[128px]">
+      <div className="flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full border border-dashed border-white/20 font-display text-lg font-bold text-white/30">
         {n}
       </div>
-      <span className="text-[11px] font-semibold text-white/40">Empty seat</span>
+      <span className="text-[10px] sm:text-[11px] font-semibold text-white/40">Empty seat</span>
     </div>
   );
 }
@@ -130,7 +130,7 @@ export default function WaitingRoom({ socket }) {
 
           {/* real match facts */}
           <div className="mt-4 flex flex-wrap gap-2">
-            {[`Up to ${MAX_SEATS} players`, `${TURN_SECONDS}s per turn`, `${dealt} cards each at ${count} player${count === 1 ? '' : 's'}`].map((t) => (
+            {[`${TURN_SECONDS}s per turn`, `${dealt} cards each`].map((t) => (
               <span key={t} className="rounded-xl bg-surface-container-lowest/60 px-3 py-1.5 text-xs font-semibold text-on-surface">
                 {t}
               </span>
@@ -142,7 +142,7 @@ export default function WaitingRoom({ socket }) {
             <h2 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Player seats</h2>
             <span className="text-[11px] font-semibold text-on-surface-variant">Need at least 2 to start</span>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-4 sm:grid-cols-4 sm:gap-x-3">
+          <div className="mt-3 grid grid-cols-4 gap-x-1.5 gap-y-4 sm:gap-x-3">
             {players.map((p) => (
               <Seat key={p.id} player={p} isHost={p.id === host_id} isYou={p.id === clientId} />
             ))}
@@ -158,7 +158,7 @@ export default function WaitingRoom({ socket }) {
                 type="button"
                 onClick={startGame}
                 disabled={!canStart}
-                className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-gold font-display text-lg font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:opacity-40 disabled:shadow-none touch-manipulation"
+                className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-gold font-display text-lg font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
               >
                 {canStart ? `Start Game (${count} players)` : 'Waiting for one more player…'}
               </button>

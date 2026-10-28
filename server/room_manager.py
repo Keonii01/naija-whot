@@ -1,7 +1,7 @@
 import asyncio
 import json
 import random
-import string
+## import string
 import time
 import uuid
 
@@ -14,8 +14,11 @@ LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
 AFK_LIMIT = 3        # consecutive missed turns before a player is removed
 
+# no 0/O/1/I so codes are never misread when typed or read aloud
+CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
 def gen_room_code():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    return ''.join(random.choices(CODE_CHARS, k=5))
 
 
 class Room:
