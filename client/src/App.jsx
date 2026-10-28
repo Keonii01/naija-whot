@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useWhotSocket } from './hooks/useWhotSocket';
 import Lobby from './components/Lobby';
 import GameTable from './components/GameTable';
+import SpectatorTable from './components/SpectatorTable';
 import { setMuted, isMuted } from './utils/sounds';
 
 export default function App() {
@@ -37,7 +38,13 @@ export default function App() {
         </div>
       )}
 
-      {!inGame ? <Lobby socket={socket} /> : <GameTable socket={socket} />}
+      {!inGame ? (
+        <Lobby socket={socket} />
+      ) : socket.gameState.is_spectator ? (
+        <SpectatorTable socket={socket} />
+      ) : (
+        <GameTable socket={socket} />
+      )}
     </div>
   );
 }
