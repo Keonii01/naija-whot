@@ -12,7 +12,7 @@ TURN_SECONDS = 15   # the app reads this from the server, so change it here only
 HOST_GRACE = 15      # seconds before a disconnected host hands over
 LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
-AFK_LIMIT = 3        # consecutive missed turns before a player is removed
+AFK_LIMIT = 4        # consecutive missed turns before a player is removed (4 x 15s = one minute)
 MAX_PLAYERS = 8
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
@@ -312,7 +312,7 @@ class RoomManager:
             return
         if room.afk[pid] == AFK_LIMIT - 1:
             await self.send(pid, {"type": "notice", "message":
-                "You've missed 2 turns in a row. Miss one more and you'll be removed from the game."})
+                f"You've missed {AFK_LIMIT - 1} turns in a row. Miss one more and you'll be removed from the game."})
         room.game.force_timeout_draw(pid)
         await self._after_action(room)
 
