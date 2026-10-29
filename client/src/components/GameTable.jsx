@@ -242,7 +242,7 @@ export default function GameTable({ socket }) {
               {selected.length > 0 && (
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-1">
                   <span className="basis-full text-center text-sm text-on-surface-variant">
-                    {selected.length} selected{comboMates.size > selected.length - 1 ? ' — tap more of the same number to add' : ''}
+                    {selected.length} selected{comboMates.size > selected.length - 1 ? ': tap more of the same number to add' : ''}
                   </span>
                   <button
                     onClick={() => submitPlay(selected)}

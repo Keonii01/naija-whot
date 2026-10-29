@@ -329,7 +329,7 @@ class WhotGame:
 
         if number == 1:
             self.free_play = self.rules["hold_on_any_card"]
-            return "Hold On — plays again, any card!" if self.free_play else "Hold On — plays again."
+            return "Hold On: plays again, any card!" if self.free_play else "Hold On: plays again."
 
         if number == 2 or (number == 5 and self.rules["pick_three_action"]):
             label = "Pick Two" if number == 2 else "Pick Three"
