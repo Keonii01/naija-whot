@@ -11,6 +11,28 @@ function colorFor(id) {
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
+/* House rules the host can switch. Only the server decides what they do. */
+const STANDARD_RULES = { pick_three_action: true, cancel_penalties: false };
+const RULE_OPTIONS = [
+  { key: 'pick_three_action', label: 'Pick Three is an action card', hint: 'Turn off if your table only plays Pick Two. A 5 then becomes an ordinary card.' },
+  { key: 'cancel_penalties', label: 'Penalties cancel out', hint: 'With 3+ players, matching Pick cards cancel each other instead of passing round. Any leftover goes to the next player.' },
+];
+
+function RuleSwitch({ on, onChange, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onChange}
+      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors touch-manipulation ${on ? 'bg-primary' : 'bg-white/20'}`}
+    >
+      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-6' : 'left-1'}`} />
+    </button>
+  );
+}
+
 function Seat({ player, isHost, isYou }) {
   const color = colorFor(player.id);
   return (
@@ -46,8 +68,9 @@ function EmptySeat({ n }) {
 }
 
 export default function WaitingRoom({ socket }) {
-  const { room, clientId, startGame, takeSeat, leaveRoom } = socket;
+  const { room, clientId, startGame, takeSeat, setRules, leaveRoom } = socket;
   const [copied, setCopied] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const { players, host_id, room_code, last_result } = room;
   const watchers = room.spectators ?? 0;
@@ -57,6 +80,8 @@ export default function WaitingRoom({ socket }) {
   const count = players.length;
   const canStart = count >= 2;
   const dealt = count <= 4 ? 5 : 3; // matches the server's deal rule
+  const rules = room.rules ?? STANDARD_RULES;
+  const customCount = RULE_OPTIONS.filter((r) => rules[r.key] !== STANDARD_RULES[r.key]).length;
 
   const copyCode = async () => {
     try {
@@ -136,14 +161,51 @@ export default function WaitingRoom({ socket }) {
             </div>
           </div>
 
-          {/* real match facts */}
-          <div className="mt-4 flex flex-wrap gap-2">
+          {/* real match facts + house rules */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {[`${TURN_SECONDS}s per turn`, `${dealt} cards each`].map((t) => (
               <span key={t} className="rounded-xl bg-surface-container-lowest/60 px-3 py-1.5 text-xs font-semibold text-on-surface">
                 {t}
               </span>
             ))}
+            <button
+              type="button"
+              onClick={() => setShowRules((v) => !v)}
+              aria-expanded={showRules}
+              className="ml-auto inline-flex min-h-[32px] items-center gap-1.5 rounded-xl bg-surface-container-high px-3 text-xs font-bold text-white transition hover:bg-surface-container-highest touch-manipulation"
+            >
+              House rules
+              {customCount > 0 && (
+                <span className="rounded-full bg-secondary px-1.5 text-[10px] font-extrabold text-on-secondary">{customCount}</span>
+              )}
+              <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 transition-transform ${showRules ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
           </div>
+
+          {showRules && (
+            <div className="mt-3 space-y-3 rounded-2xl bg-surface-container-lowest/50 p-3">
+              {RULE_OPTIONS.map((r) => (
+                <div key={r.key} className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-white">{r.label}</p>
+                    <p className="text-[11px] leading-snug text-on-surface-variant">{r.hint}</p>
+                  </div>
+                  {isHost ? (
+                    <RuleSwitch on={!!rules[r.key]} label={r.label} onChange={() => setRules({ [r.key]: !rules[r.key] })} />
+                  ) : (
+                    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${rules[r.key] ? 'bg-primary/20 text-primary' : 'bg-white/10 text-on-surface-variant'}`}>
+                      {rules[r.key] ? 'ON' : 'OFF'}
+                    </span>
+                  )}
+                </div>
+              ))}
+              <p className="text-[11px] text-on-surface-variant">
+                {isHost ? 'You choose the rules before the game starts.' : 'Only the host can change these.'}
+              </p>
+            </div>
+          )}
 
           {/* seats */}
           <div className="mt-6 flex items-center justify-between">

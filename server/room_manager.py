@@ -5,7 +5,7 @@ import string
 import time
 import uuid
 
-from whot_engine import WhotGame, Player
+from whot_engine import WhotGame, Player, DEFAULT_RULES, clean_rules
 
 TURN_SECONDS = 30
 
@@ -43,6 +43,7 @@ class Room:
         self.host_task = None
         self.afk = {}              # player id -> consecutive missed turns
         self.last_result = None    # shown in the waiting room after a game
+        self.rules = dict(DEFAULT_RULES)   # house rules, set by the host before the game starts
 
     def add_player(self, player_id, name):
         if player_id in self.players:
@@ -70,13 +71,14 @@ class Room:
             "players": [{"id": pid, "name": p.name} for pid, p in self.players.items()],
             "spectators": len(self.spectators),
             "last_result": self.last_result,
+            "rules": self.rules,
         }
 
     def start_game(self):
         # fresh Player objects every time, so a rematch never inherits old hands
         fresh = [Player(pid, self.players[pid].name) for pid in self.order]
         self.players = {p.id: p for p in fresh}
-        self.game = WhotGame(fresh)
+        self.game = WhotGame(fresh, self.rules)
         self.started = True
         self.afk = {}
         self.last_result = None
@@ -403,6 +405,18 @@ class RoomManager:
                         return
                     room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
                 await self.broadcast_lobby(room)
+
+        elif mtype == "set_rules":
+            room = self._get_room(client_id)
+            incoming = msg.get("rules")
+            if not room or not isinstance(incoming, dict):
+                return
+            if room.host_id != client_id or room.started:
+                await self.send(client_id, {"type": "error", "message": "Only the host can change the rules, before the game starts"})
+                return
+            room.rules = clean_rules({**room.rules, **incoming})
+            self._touch(room)
+            await self.broadcast_lobby(room)
 
         elif mtype == "take_seat":
             # a watcher becomes a player (waiting room only)

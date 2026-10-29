@@ -4,8 +4,8 @@ import whot_engine as W
 
 PAD = [('Star', 3)] * 3          # filler cards so nobody wins by emptying their hand
 
-def game(n, hands, top=('Circle', 9)):
-    g = W.WhotGame([W.Player(f"p{i}", f"P{i+1}") for i in range(n)])
+def game(n, hands, top=('Circle', 9), rules=None):
+    g = W.WhotGame([W.Player(f"p{i}", f"P{i+1}") for i in range(n)], rules)
     for p, h in zip(g.players, hands):
         p.hand = [W.WhotCard(s, k) for s, k in h] + [W.WhotCard(*c) for c in PAD]
     g.discard_pile = [W.WhotCard(*top)]
@@ -72,4 +72,34 @@ g = game(3, [[('Circle',8)], [], []]); ok(g,"p0",[('Circle',8)]); check("3P: one
 g = game(3, [[('Circle',8),('Triangle',8)], [], []]); ok(g,"p0",[('Circle',8),('Triangle',8)]); check("3P: two 8s -> back to the suspender", turn(g) == "p0")
 g = game(2, [[('Circle',8)], []]); ok(g,"p0",[('Circle',8)]); check("2P: one 8 -> suspender plays again", turn(g) == "p0")
 g = game(2, [[('Circle',8),('Triangle',8)], []]); ok(g,"p0",[('Circle',8),('Triangle',8)]); check("2P: two 8s -> suspender plays again", turn(g) == "p0")
+# ---- rule option: Pick Three is NOT an action card ----
+OFF = {"pick_three_action": False}
+g = game(2, [[('Circle',5)], []], rules=OFF); ok(g,"p0",[('Circle',5)])
+check("opt: with Pick Three off, a 5 is an ordinary card (no penalty, normal turn)", g.pending_pick == 0 and turn(g) == "p1")
+g = game(2, [[('Circle',2)], []], rules=OFF); ok(g,"p0",[('Circle',2)])
+check("opt: Pick Two still works with Pick Three off", g.pending_pick == 2 and turn(g) == "p1")
+g = game(2, [[], []], rules=OFF); a = g.get_player("p0"); a.hand = [W.WhotCard('Circle',5)]; a.last_card_called = True
+r = play(g,"p0",[('Circle',5)]); check("opt: with Pick Three off, a 5 can be your winning last card", r.get("game_over") and g.winner_id == "p0")
+g = game(2, [[], []]); a = g.get_player("p0"); a.hand = [W.WhotCard('Circle',5)]; a.last_card_called = True
+r = play(g,"p0",[('Circle',5)]); check("opt: with Pick Three on (default), a 5 as last card does not win", not r.get("game_over"))
+for _ in range(30):   # the start card is never an action card, per the room's rules
+    g = game(2, [[], []], rules=OFF)
+    g2 = W.WhotGame([W.Player("a","A"), W.Player("b","B")], OFF); assert not g2.is_action(g2.top_card.number)
+check("opt: start card is never an action card (30 deals)", True)
+
+# ---- rule option: penalties cancel with 3+ players ----
+CAN = {"cancel_penalties": True}
+g = game(3, [[('Circle',5)], [('Triangle',5)], []], rules=CAN); ok(g,"p0",[('Circle',5)]); ok(g,"p1",[('Triangle',5)])
+check("opt: cancel variant, 3P: 5 vs 5 cancels, third player plays on", g.pending_pick == 0 and turn(g) == "p2")
+g = game(3, [[('Circle',5),('Square',5)], [('Triangle',5)], []], rules=CAN); ok(g,"p0",[('Circle',5),('Square',5)]); ok(g,"p1",[('Triangle',5)])
+check("opt: cancel variant, 3P: two 5s vs one 5 -> third player faces 3", g.pending_pick == 3 and turn(g) == "p2")
+g = game(3, [[('Circle',5)], [('Triangle',5),('Star',5)], []], rules=CAN); ok(g,"p0",[('Circle',5)]); ok(g,"p1",[('Triangle',5),('Star',5)])
+check("opt: cancel variant, 3P: one 5 vs two 5s -> third player faces 3", g.pending_pick == 3 and turn(g) == "p2")
+g = game(3, [[('Circle',2)], [('Triangle',2)], []], rules=CAN); ok(g,"p0",[('Circle',2)]); ok(g,"p1",[('Triangle',2)])
+check("opt: cancel variant, 3P: 2 vs 2 cancels", g.pending_pick == 0 and turn(g) == "p2")
+g = game(3, [[('Circle',5)], [], []], rules=CAN); ok(g,"p0",[('Circle',5)])
+check("opt: cancel variant: a first penalty still goes to the next player", g.pending_pick == 3 and turn(g) == "p1")
+
+# ---- junk rules are ignored ----
+check("opt: junk rules fall back to defaults", W.clean_rules({"pick_three_action": "no", "evil": True}) == W.DEFAULT_RULES and W.clean_rules("x") == W.DEFAULT_RULES)
 print("ALL PASSED")

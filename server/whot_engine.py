@@ -15,6 +15,22 @@ SPECIAL_NAMES = {
 }
 
 
+# House rules a host can switch per room. The server enforces them; the client only shows them.
+DEFAULT_RULES = {
+    "pick_three_action": True,    # False: a 5 is an ordinary card (only Pick Two is a penalty)
+    "cancel_penalties": False,    # True: with 3+ players matching Pick cards cancel instead of redirecting
+}
+
+
+def clean_rules(raw):
+    out = dict(DEFAULT_RULES)
+    if isinstance(raw, dict):
+        for key in DEFAULT_RULES:
+            if isinstance(raw.get(key), bool):
+                out[key] = raw[key]
+    return out
+
+
 class WhotCard:
     def __init__(self, shape, number):
         self.id = str(uuid.uuid4())
@@ -75,9 +91,10 @@ class WhotGame:
     MIN_PLAYERS = 2
     MAX_PLAYERS = 8
 
-    def __init__(self, players):
+    def __init__(self, players, rules=None):
         assert self.MIN_PLAYERS <= len(players) <= self.MAX_PLAYERS, "2-8 players required"
         self.players = players
+        self.rules = clean_rules(rules)
         # 2-4 players start with 5 cards, 5-8 with 3
         self.hand_size = 5 if len(players) <= 4 else 3
         # 2-player games reshuffle when the market runs out; 3-8 player games end and count points
@@ -101,11 +118,17 @@ class WhotGame:
                 p.hand.append(self.deck.pop())
         # the card that starts the table is never an action card (1, 2, 5, 8, 14, 20)
         first = self.deck.pop()
-        while first.number in SPECIAL_NAMES:
+        while self.is_action(first.number):
             self.deck.insert(0, first)
             random.shuffle(self.deck)
             first = self.deck.pop()
         self.discard_pile.append(first)
+
+    def is_action(self, number):
+        """Action cards follow the room's rules: with Pick Three switched off, a 5 is an ordinary card."""
+        if number == 5 and not self.rules["pick_three_action"]:
+            return False
+        return number in SPECIAL_NAMES
 
     @property
     def top_card(self):
@@ -273,7 +296,7 @@ class WhotGame:
         self.pending_shape = None
 
         played = " + ".join(repr(c) for c in cards)
-        would_win = len(player.hand) == 0 and cards[-1].number not in SPECIAL_NAMES
+        would_win = len(player.hand) == 0 and not self.is_action(cards[-1].number)
         if would_win and was_last_card and not player.last_card_called:
             return self._last_card_penalty(player, played)
         if would_win:
@@ -298,11 +321,14 @@ class WhotGame:
         if number == 1:
             return "Hold On — plays again."
 
-        if number in (2, 5):
+        if number == 2 or (number == 5 and self.rules["pick_three_action"]):
             label = "Pick Two" if number == 2 else "Pick Three"
             amount = (2 if number == 2 else 3) * n
-            if len(self.players) == 2 and self.pending_pick > 0:
-                return self._counter_two_player(player, amount, label)
+            if self.pending_pick > 0:
+                if len(self.players) == 2:
+                    return self._counter_two_player(player, amount, label)
+                if self.rules["cancel_penalties"]:
+                    return self._counter_cancel(amount, label)
             self.pending_pick += amount
             self._advance()
             return f"{label}! Pending pick now {self.pending_pick}."
@@ -338,6 +364,16 @@ class WhotGame:
         self.pending_pick = -net
         self._advance()
         return f"Countered! Pending pick now {self.pending_pick}, back to the other player."
+
+    def _counter_cancel(self, amount, label):
+        """3+ players, cancel variant: a counter cancels the same number of penalty cards; whatever is
+        left, from either side, goes live against the next player (who can counter it or pick)."""
+        net = abs(self.pending_pick - amount)
+        self.pending_pick = net
+        self._advance()
+        if net == 0:
+            return f"{label} cancelled out. Nobody picks."
+        return f"Countered! Pending pick now {net}."
 
     def draw_card(self, player_id):
         player = self.get_player(player_id)
@@ -394,6 +430,7 @@ class WhotGame:
             "top_card": self.top_card.to_dict(),
             "pending_shape": self.pending_shape,
             "pending_pick": self.pending_pick,
+            "rules": self.rules,
             "deck_count": len(self.deck),
             "current_player_id": self.current_player().id,
             "game_over": self.game_over,

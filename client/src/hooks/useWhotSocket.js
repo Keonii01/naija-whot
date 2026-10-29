@@ -151,6 +151,7 @@ export function useWhotSocket() {
     leaveRoom,
     startGame: () => send({ type: 'start_game' }),
     takeSeat: () => send({ type: 'take_seat' }),
+    setRules: (rules) => send({ type: 'set_rules', rules }),
     playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
     drawCard: () => send({ type: 'draw_card' }),
