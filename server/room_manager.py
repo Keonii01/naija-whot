@@ -7,7 +7,7 @@ import uuid
 
 from whot_engine import WhotGame, Player, DEFAULT_RULES, clean_rules
 
-TURN_SECONDS = 30
+TURN_SECONDS = 15   # the app reads this from the server, so change it here only
 
 HOST_GRACE = 15      # seconds before a disconnected host hands over
 LOBBY_GRACE = 60     # empty waiting room is deleted after this
@@ -72,6 +72,7 @@ class Room:
             "spectators": len(self.spectators),
             "last_result": self.last_result,
             "rules": self.rules,
+            "turn_seconds": TURN_SECONDS,
         }
 
     def start_game(self):
@@ -142,16 +143,19 @@ class RoomManager:
     async def send_game_state_to(self, room, client_id):
         state = room.game.state_for(client_id)
         state["turn_deadline"] = room.turn_deadline
+        state["turn_seconds"] = TURN_SECONDS
         await self.send(client_id, {"type": "game_state", "state": state})
 
     async def broadcast_game_state(self, room):
         for pid in room.order:
             state = room.game.state_for(pid)
             state["turn_deadline"] = room.turn_deadline
+            state["turn_seconds"] = TURN_SECONDS
             await self.send(pid, {"type": "game_state", "state": state})
         for sid in list(room.spectators.keys()):
             state = room.game.state_for(sid)
             state["turn_deadline"] = room.turn_deadline
+            state["turn_seconds"] = TURN_SECONDS
             await self.send(sid, {"type": "game_state", "state": state})
 
     async def broadcast(self, room, payload):

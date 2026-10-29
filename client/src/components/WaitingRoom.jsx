@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
 const MAX_SEATS = 8;
-const TURN_SECONDS = 30;
 const AVATAR_COLORS = ['#2563EB', '#16A34A', '#DC2626', '#F59E0B', '#9333EA']; // the five suit colours
 
 /* cosmetic only: same player id always gets the same colour */
@@ -75,6 +74,7 @@ export default function WaitingRoom({ socket }) {
 
   const { players, host_id, room_code, last_result } = room;
   const watchers = room.spectators ?? 0;
+  const TURN_SECONDS = room.turn_seconds ?? 15;
   const isWatcher = !players.some((p) => p.id === clientId);
   const isHost = host_id === clientId;
   const hostName = players.find((p) => p.id === host_id)?.name ?? 'the host';
@@ -165,7 +165,7 @@ export default function WaitingRoom({ socket }) {
           {/* real match facts + house rules */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {[`${TURN_SECONDS}s per turn`, `${dealt} cards each`].map((t) => (
-              <span key={t} className="rounded-xl bg-surface-container-lowest/60 px-3 py-1.5 text-xs font-semibold text-on-surface">
+              <span key={t} className="rounded-xl bg-surface-container-lowest/60 px-2.5 py-1 text-[11px] font-semibold text-on-surface sm:px-3 sm:py-1.5 sm:text-xs">
                 {t}
               </span>
             ))}
@@ -173,7 +173,7 @@ export default function WaitingRoom({ socket }) {
               type="button"
               onClick={() => setShowRules((v) => !v)}
               aria-expanded={showRules}
-              className="ml-auto inline-flex min-h-[32px] items-center gap-1.5 rounded-xl bg-surface-container-high px-3 text-xs font-bold text-white transition hover:bg-surface-container-highest touch-manipulation"
+              className="ml-auto inline-flex min-h-[32px] items-center gap-1.5 rounded-xl bg-surface-container-high px-2.5 text-[11px] font-bold text-white sm:px-3 sm:text-xs transition hover:bg-surface-container-highest touch-manipulation"
             >
               House rules
               {customCount > 0 && (

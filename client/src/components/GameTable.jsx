@@ -6,10 +6,9 @@ import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
 import { sounds } from '../utils/sounds';
 
-const TURN_SECONDS = 30;
-
 export default function GameTable({ socket }) {
   const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby } = socket;
+  const TURN_SECONDS = gameState.turn_seconds ?? 15;
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
   const prevStateRef = useRef(null);

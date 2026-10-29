@@ -4,8 +4,6 @@ import OpponentPod from './OpponentPod';
 import MatchResult from './MatchResult';
 import { sounds } from '../utils/sounds';
 
-const TURN_SECONDS = 30;
-
 const SUIT_CHIP = {
   Circle: 'bg-suit-circle text-white',
   Triangle: 'bg-suit-triangle text-white',
@@ -42,6 +40,7 @@ const Eye = ({ className = 'h-4 w-4' }) => (
 export default function SpectatorTable({ socket }) {
   const { gameState, room, clientId, rematch, returnToLobby, leaveRoom } = socket;
   const prevAction = useRef(null);
+  const TURN_SECONDS = gameState.turn_seconds ?? 15;
 
   // same card sounds the players hear
   useEffect(() => {
