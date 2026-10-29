@@ -298,15 +298,14 @@ class WhotGame:
         if number == 1:
             return "Hold On — plays again."
 
-        if number == 2:
-            self.pending_pick += 2 * n
+        if number in (2, 5):
+            label = "Pick Two" if number == 2 else "Pick Three"
+            amount = (2 if number == 2 else 3) * n
+            if len(self.players) == 2 and self.pending_pick > 0:
+                return self._counter_two_player(player, amount, label)
+            self.pending_pick += amount
             self._advance()
-            return f"Pick Two! Pending pick now {self.pending_pick}."
-
-        if number == 5:
-            self.pending_pick += 3 * n
-            self._advance()
-            return f"Pick Three! Pending pick now {self.pending_pick}."
+            return f"{label}! Pending pick now {self.pending_pick}."
 
         if number == 8:
             # skip one player per card, but never more than everyone else
@@ -321,6 +320,24 @@ class WhotGame:
 
         self._advance()
         return ""
+
+    def _counter_two_player(self, player, amount, label):
+        """Two players: a counter cancels penalty cards one for one. Equal = nobody picks.
+        If the counter is smaller, the counterer picks the leftover now. If it is bigger, the leftover
+        comes back to the other player as a live penalty (they can counter it again or pick)."""
+        net = self.pending_pick - amount
+        if net == 0:
+            self.pending_pick = 0
+            self._advance()
+            return f"{label} cancelled out. Nobody picks."
+        if net > 0:
+            drawn = self.draw_from_deck(player, net)
+            self.pending_pick = 0
+            self._advance()
+            return f"{player.name} blocks part of it and picks {len(drawn)}."
+        self.pending_pick = -net
+        self._advance()
+        return f"Countered! Pending pick now {self.pending_pick}, back to the other player."
 
     def draw_card(self, player_id):
         player = self.get_player(player_id)
