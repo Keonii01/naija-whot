@@ -19,6 +19,7 @@ SPECIAL_NAMES = {
 DEFAULT_RULES = {
     "pick_three_action": True,    # False: a 5 is an ordinary card (only Pick Two is a penalty)
     "cancel_penalties": False,    # True: with 3+ players matching Pick cards cancel instead of redirecting
+    "hold_on_any_card": False,    # True: after you play a 1, your extra play can be any card
 }
 
 
@@ -95,6 +96,7 @@ class WhotGame:
         assert self.MIN_PLAYERS <= len(players) <= self.MAX_PLAYERS, "2-8 players required"
         self.players = players
         self.rules = clean_rules(rules)
+        self.free_play = False          # True right after a Hold On when the 'any card' rule is on
         # 2-4 players start with 5 cards, 5-8 with 3
         self.hand_size = 5 if len(players) <= 4 else 3
         # 2-player games reshuffle when the market runs out; 3-8 player games end and count points
@@ -141,6 +143,7 @@ class WhotGame:
         return next((p for p in self.players if p.id == player_id), None)
 
     def _advance(self, steps=1):
+        self.free_play = False
         self.current_idx = (self.current_idx + steps) % len(self.players)
 
     def _reshuffle(self):
@@ -216,6 +219,7 @@ class WhotGame:
         was_current = idx == self.current_idx
         self.deck = player.hand + self.deck          # bottom of the market
         self.players.pop(idx)
+        self.free_play = False
         if len(self.players) == 1:
             self.current_idx = 0                     # only one seat is left: keep the index valid
             self._finish("forfeit", self.players[0])
@@ -254,6 +258,8 @@ class WhotGame:
         return {"success": True, "penalty": "last_card", "drawn": len(drawn), "message": self.last_action}
 
     def _is_playable(self, card):
+        if self.free_play:
+            return True
         if self.pending_pick > 0:
             return card.number == self.top_card.number
         if card.shape == 'Whot':
@@ -293,6 +299,7 @@ class WhotGame:
         for card in cards:
             player.hand.remove(card)
             self.discard_pile.append(card)
+        self.free_play = False
         self.pending_shape = None
 
         played = " + ".join(repr(c) for c in cards)
@@ -319,7 +326,8 @@ class WhotGame:
             return f"Whot! Shape locked to {self.pending_shape}."
 
         if number == 1:
-            return "Hold On — plays again."
+            self.free_play = self.rules["hold_on_any_card"]
+            return "Hold On — plays again, any card!" if self.free_play else "Hold On — plays again."
 
         if number == 2 or (number == 5 and self.rules["pick_three_action"]):
             label = "Pick Two" if number == 2 else "Pick Three"

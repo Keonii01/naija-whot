@@ -12,10 +12,11 @@ function colorFor(id) {
 }
 
 /* House rules the host can switch. Only the server decides what they do. */
-const STANDARD_RULES = { pick_three_action: true, cancel_penalties: false };
+const STANDARD_RULES = { pick_three_action: true, cancel_penalties: false, hold_on_any_card: false };
 const RULE_OPTIONS = [
   { key: 'pick_three_action', label: 'Pick Three is an action card', hint: 'Turn off if your table only plays Pick Two. A 5 then becomes an ordinary card.' },
   { key: 'cancel_penalties', label: 'Penalties cancel out', hint: 'With 3+ players, matching Pick cards cancel each other instead of passing round. Any leftover goes to the next player.' },
+  { key: 'hold_on_any_card', label: 'Hold On lets you play any card', hint: 'After you play a 1, your extra play can be any card, whatever the shape or number.' },
 ];
 
 function RuleSwitch({ on, onChange, label }) {

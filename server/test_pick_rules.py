@@ -102,4 +102,27 @@ check("opt: cancel variant: a first penalty still goes to the next player", g.pe
 
 # ---- junk rules are ignored ----
 check("opt: junk rules fall back to defaults", W.clean_rules({"pick_three_action": "no", "evil": True}) == W.DEFAULT_RULES and W.clean_rules("x") == W.DEFAULT_RULES)
+# ---- rule option: Hold On (1) lets the extra play be any card ----
+HOLD = {"hold_on_any_card": True}
+def ids(g, pid): return {c.id for c in g.playable_cards(g.get_player(pid))}
+g = game(2, [[('Circle',1)], []]); ok(g,"p0",[('Circle',1)])
+r = play(g,"p0",[('Star',3)]); check("opt: default: after a 1 the extra play must still match", not r["success"])
+g = game(2, [[('Circle',1)], [('Triangle',4)]], rules=HOLD); ok(g,"p0",[('Circle',1)])
+check("opt: Hold On rule: same player plays again, every card is playable", turn(g) == "p0" and ids(g,"p0") == {c.id for c in g.get_player("p0").hand})
+ok(g,"p0",[('Star',3)]); check("opt: Hold On rule: the free play works, then the turn moves on", turn(g) == "p1" and g.top_card.shape == 'Star')
+r = play(g,"p1",[('Triangle',4)])
+check("opt: Hold On rule: the NEXT player is not free (a non-matching card is refused)", not r["success"])
+g = game(2, [[('Circle',1)], []], rules=HOLD); ok(g,"p0",[('Circle',1)]); g.draw_card("p0")
+check("opt: Hold On rule: drawing ends the free play", turn(g) == "p1" and not g.free_play)
+g = game(2, [[('Circle',1),('Square',1)], []], rules=HOLD); ok(g,"p0",[('Circle',1),('Square',1)])
+ok(g,"p0",[('Star',3)]); check("opt: Hold On rule: two 1s together still give one free play", turn(g) == "p1")
+g = game(2, [[('Circle',1),('Triangle',2)], []], rules=HOLD); ok(g,"p0",[('Circle',1)]); ok(g,"p0",[('Triangle',2)])
+check("opt: Hold On rule: a free-play 2 still makes the next player pick", g.pending_pick == 2 and turn(g) == "p1")
+g = game(2, [[('Circle',1),('Whot',20)], []], rules=HOLD); ok(g,"p0",[('Circle',1)])
+p0 = g.get_player("p0"); wid = next(c.id for c in p0.hand if c.shape == 'Whot')
+r = g.play_cards("p0", [wid], 'Star'); check("opt: Hold On rule: free-play Whot works with a called shape", r["success"] and g.pending_shape == 'Star')
+g = game(3, [[('Circle',1)], [], []], rules=HOLD); ok(g,"p0",[('Circle',1)]); g.remove_player("p0")
+check("opt: Hold On rule: free play does not leak to another player if the holder leaves", not g.free_play)
+check("opt: rules are all in game_state", set(g.state_for("p1")["rules"]) == set(W.DEFAULT_RULES) and "hold_on_any_card" in W.DEFAULT_RULES)
+
 print("ALL PASSED")
