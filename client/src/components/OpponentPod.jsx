@@ -40,6 +40,13 @@ export default function OpponentPod({ player, isCurrent, isHost, deadline, total
             {Math.ceil(remaining)}s
           </span>
         )}
+        {player.is_bot && (
+          <span title="Computer" aria-label="Computer" className="absolute -bottom-1 -left-1 flex h-4 w-4 items-center justify-center rounded-full bg-tertiary-container text-on-tertiary-container shadow">
+            <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="8" width="14" height="10" rx="2" /><path d="M12 8V5M9.5 13h.01M14.5 13h.01" />
+            </svg>
+          </span>
+        )}
         {isHost && (
           <span className="absolute -bottom-1 -right-1 text-[10px] bg-surface-container text-on-surface px-1.5 rounded-full shadow">
             Host

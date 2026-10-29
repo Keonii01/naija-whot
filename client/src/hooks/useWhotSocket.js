@@ -120,10 +120,10 @@ export function useWhotSocket() {
     }
   }, []);
 
-  const createRoom = (name) => {
+  const createRoom = (name, bots = 0) => {
     localStorage.setItem('whot_player_name', name);
     localStorage.setItem('whot_spectating', '0');
-    send({ type: 'create_room', player_name: name });
+    send({ type: 'create_room', player_name: name, bots });
   };
 
   const joinRoom = (code, name, spectate = false) => {
@@ -151,6 +151,8 @@ export function useWhotSocket() {
     leaveRoom,
     startGame: () => send({ type: 'start_game' }),
     takeSeat: () => send({ type: 'take_seat' }),
+    addBot: () => send({ type: 'add_bot' }),
+    removeBot: (id) => send({ type: 'remove_bot', bot_id: id }),
     setRules: (rules) => send({ type: 'set_rules', rules }),
     playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),

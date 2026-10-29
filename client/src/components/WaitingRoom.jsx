@@ -34,7 +34,7 @@ function RuleSwitch({ on, onChange, label }) {
   );
 }
 
-function Seat({ player, isHost, isYou }) {
+function Seat({ player, isHost, isYou, onRemove }) {
   const color = colorFor(player.id);
   return (
     <div className="relative flex flex-col items-center gap-1 sm:gap-1.5 rounded-2xl bg-surface-container-high/80 px-1 pt-5 pb-2.5 sm:px-2 sm:pb-3 shadow-lg min-w-0">
@@ -43,6 +43,16 @@ function Seat({ player, isHost, isYou }) {
           HOST
         </span>
       )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${player.name}`}
+          className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/30 text-white/70 transition hover:bg-black/50 hover:text-white touch-manipulation"
+        >
+          <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      )}
       <div
         className="flex h-10 w-10 sm:h-14 sm:w-14 items-center justify-center rounded-full font-display text-xl font-extrabold text-white shadow-inner ring-2 ring-white/20"
         style={{ backgroundColor: color }}
@@ -50,9 +60,13 @@ function Seat({ player, isHost, isYou }) {
         {(player.name || '?').charAt(0).toUpperCase()}
       </div>
       <span className="w-full truncate text-center font-display text-xs sm:text-sm font-semibold text-white">{player.name}</span>
-      <span className={`text-[10px] sm:text-[11px] font-semibold ${isYou ? 'text-secondary' : 'hidden sm:block text-on-surface-variant'}`}>
-        {isYou ? 'You' : 'In the room'}
-      </span>
+      {player.is_bot ? (
+        <span className="rounded-full bg-tertiary-container/60 px-2 py-0.5 text-[10px] font-bold text-on-tertiary-container">Computer</span>
+      ) : (
+        <span className={`text-[10px] sm:text-[11px] font-semibold ${isYou ? 'text-secondary' : 'hidden sm:block text-on-surface-variant'}`}>
+          {isYou ? 'You' : 'In the room'}
+        </span>
+      )}
     </div>
   );
 }
@@ -69,7 +83,7 @@ function EmptySeat({ n }) {
 }
 
 export default function WaitingRoom({ socket }) {
-  const { room, clientId, startGame, takeSeat, setRules, leaveRoom } = socket;
+  const { room, clientId, startGame, takeSeat, setRules, addBot, removeBot, leaveRoom } = socket;
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -215,11 +229,22 @@ export default function WaitingRoom({ socket }) {
           {/* seats */}
           <div className="mt-6 flex items-center justify-between">
             <h2 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Player seats</h2>
-            <span className="text-[11px] font-semibold text-on-surface-variant">Need at least 2 to start</span>
+            {isHost && count < MAX_SEATS ? (
+              <button
+                type="button"
+                onClick={addBot}
+                className="inline-flex min-h-[32px] items-center gap-1.5 rounded-xl bg-tertiary-container/50 px-3 text-[11px] font-bold text-on-tertiary-container transition hover:bg-tertiary-container/80 active:scale-95 touch-manipulation sm:text-xs"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+                Add computer
+              </button>
+            ) : (
+              <span className="text-[11px] font-semibold text-on-surface-variant">Need at least 2 to start</span>
+            )}
           </div>
           <div className="mt-3 grid grid-cols-4 gap-x-1.5 gap-y-3 sm:gap-x-3 sm:gap-y-4">
             {players.map((p) => (
-              <Seat key={p.id} player={p} isHost={p.id === host_id} isYou={p.id === clientId} />
+              <Seat key={p.id} player={p} isHost={p.id === host_id} isYou={p.id === clientId} onRemove={isHost && p.is_bot ? () => removeBot(p.id) : undefined} />
             ))}
             {Array.from({ length: MAX_SEATS - count }, (_, i) => (
               <EmptySeat key={`empty-${i}`} n={count + i + 1} />

@@ -144,6 +144,18 @@ export default function Lobby({ socket }) {
 
           <button
             type="button"
+            onClick={() => ready && socket.createRoom(name.trim(), 1)}
+            disabled={!ready}
+            className="mt-3 flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-tertiary-container/60 font-display text-base font-bold text-on-tertiary-container transition hover:bg-tertiary-container/80 active:scale-[0.99] disabled:opacity-40 touch-manipulation"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="5" y="8" width="14" height="10" rx="2" /><path d="M12 8V5M9.5 13h.01M14.5 13h.01" />
+            </svg>
+            Play vs Computer
+          </button>
+
+          <button
+            type="button"
             onClick={() => ready && setMode('join')}
             disabled={!ready}
             className="mt-3 flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-primary-container/80 font-display text-base font-bold text-white transition hover:bg-primary-container active:scale-[0.99] disabled:opacity-40 touch-manipulation"
