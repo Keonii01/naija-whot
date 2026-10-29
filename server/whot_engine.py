@@ -72,6 +72,7 @@ class Player:
         self.hand = []
         self.connected = True
         self.last_card_called = False
+        self.is_bot = False
 
     def to_public_dict(self):
         return {
@@ -80,6 +81,7 @@ class Player:
             "card_count": len(self.hand),
             "connected": self.connected,
             "last_card_called": self.last_card_called,
+            "is_bot": self.is_bot,
         }
 
     def to_private_dict(self):

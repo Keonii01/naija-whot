@@ -6,6 +6,7 @@ import time
 import uuid
 
 from whot_engine import WhotGame, Player, DEFAULT_RULES, clean_rules
+import bot
 
 TURN_SECONDS = 15   # the app reads this from the server, so change it here only
 
@@ -16,6 +17,7 @@ AFK_LIMIT = 4        # consecutive missed turns before a player is removed (4 x 
 MAX_PLAYERS = 8
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
+BOT_DELAY = (1.0, 2.5)   # a computer thinks for a random 1 to 2.5 seconds before each move
 
 # no 0/O/1/I so codes are never misread when typed or read aloud
 CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -41,6 +43,8 @@ class Room:
         self.turn_deadline = None
         self.cleanup_task = None
         self.host_task = None
+        self.bots = set()          # ids of computer players (they have no connection)
+        self.bot_task = None
         self.afk = {}              # player id -> consecutive missed turns
         self.last_result = None    # shown in the waiting room after a game
         self.rules = dict(DEFAULT_RULES)   # house rules, set by the host before the game starts
@@ -55,6 +59,7 @@ class Room:
         if player_id in self.players:
             del self.players[player_id]
             self.order.remove(player_id)
+        self.bots.discard(player_id)
 
     def add_spectator(self, spectator_id, name):
         self.spectators[spectator_id] = name or "Spectator"
@@ -68,7 +73,7 @@ class Room:
             "room_code": self.code,
             "host_id": self.host_id,
             "started": self.started,
-            "players": [{"id": pid, "name": p.name} for pid, p in self.players.items()],
+            "players": [{"id": pid, "name": p.name, "is_bot": pid in self.bots} for pid, p in self.players.items()],
             "spectators": len(self.spectators),
             "last_result": self.last_result,
             "rules": self.rules,
@@ -78,6 +83,8 @@ class Room:
     def start_game(self):
         # fresh Player objects every time, so a rematch never inherits old hands
         fresh = [Player(pid, self.players[pid].name) for pid in self.order]
+        for p in fresh:
+            p.is_bot = p.id in self.bots
         self.players = {p.id: p for p in fresh}
         self.game = WhotGame(fresh, self.rules)
         self.started = True
@@ -184,7 +191,7 @@ class RoomManager:
 
     def _delete_room(self, room):
         self._stop_timer(room)
-        for t in (room.cleanup_task, room.host_task):
+        for t in (room.cleanup_task, room.host_task, room.bot_task):
             if t and t is not asyncio.current_task():
                 t.cancel()
         for pid in self._member_ids(room):
@@ -217,7 +224,7 @@ class RoomManager:
             candidates = [p.id for p in room.game.players
                           if p.connected and p.id in self.connections and p.id in room.players]
         else:
-            candidates = list(room.order)
+            candidates = [pid for pid in room.order if pid not in room.bots]
         if candidates and room.host_id not in candidates:
             room.host_id = candidates[0]
             return True
@@ -247,7 +254,7 @@ class RoomManager:
         winner = game.get_player(game.winner_id) if game.winner_id else None
         room.last_result = {"winner": winner.name if winner else None, "reason": game.end_reason}
         staying = [p.id for p in game.players
-                   if p.connected and p.id in self.connections and p.id in room.players]
+                   if p.id in room.players and (p.id in room.bots or (p.connected and p.id in self.connections))]
         for pid in list(room.order):
             if pid not in staying:
                 room.remove_player(pid)                  # gone players don't carry over
@@ -292,6 +299,7 @@ class RoomManager:
         room.turn_deadline = deadline
         room.turn_task = asyncio.create_task(self._turn_timeout_watcher(room, deadline))
         await self.broadcast_game_state(room)
+        self._schedule_bot(room, deadline)
 
     async def _turn_timeout_watcher(self, room, deadline):
         try:
@@ -306,6 +314,9 @@ class RoomManager:
 
         current = room.game.current_player()
         pid = current.id
+        if pid in room.bots:
+            await self._bot_move(room, pid)      # safety net: a computer is never AFK-kicked
+            return
         room.afk[pid] = room.afk.get(pid, 0) + 1
         if room.afk[pid] >= AFK_LIMIT:
             await self._kick_afk(room, current)
@@ -314,6 +325,52 @@ class RoomManager:
             await self.send(pid, {"type": "notice", "message":
                 f"You've missed {AFK_LIMIT - 1} turns in a row. Miss one more and you'll be removed from the game."})
         room.game.force_timeout_draw(pid)
+        await self._after_action(room)
+
+    # ---------------- Computer players ----------------
+
+    def _add_bot(self, room):
+        bid = "bot-" + uuid.uuid4().hex[:8]
+        room.add_player(bid, bot.random_bot_name([p.name for p in room.players.values()]))
+        room.bots.add(bid)
+
+    def _schedule_bot(self, room, deadline):
+        game = room.game
+        if not game or game.game_over or game.current_player().id not in room.bots:
+            return
+        if room.bot_task and room.bot_task is not asyncio.current_task():
+            room.bot_task.cancel()
+        room.bot_task = asyncio.create_task(self._bot_turn(room, game.current_player().id, deadline))
+
+    def _bot_can_act(self, room, pid):
+        return (self.rooms.get(room.code) is room and room.game and not room.game.game_over
+                and room.game.current_player().id == pid)
+
+    async def _bot_turn(self, room, pid, deadline):
+        try:
+            await asyncio.sleep(random.uniform(*BOT_DELAY))
+        except asyncio.CancelledError:
+            return
+        if room.turn_deadline != deadline or not self._bot_can_act(room, pid):
+            return                                   # the turn moved on while it was thinking
+        await self._bot_move(room, pid)
+
+    async def _bot_move(self, room, pid):
+        game = room.game
+        act = bot.choose_action(bot.make_view(game, pid))
+        if act["action"] == "last_card":
+            game.call_last_card(pid)                 # like a person pressing LAST CARD, then a short beat
+            await self.broadcast_game_state(room)
+            await asyncio.sleep(random.uniform(0.6, 1.2))
+            if not self._bot_can_act(room, pid):
+                return
+            act = bot.choose_action(bot.make_view(game, pid))
+        if act["action"] == "play":
+            result = game.play_cards(pid, act["card_ids"], act["shape"])
+        else:
+            result = game.draw_card(pid)
+        if not result.get("success"):
+            game.force_timeout_draw(pid)             # should never happen; never leave the table stuck
         await self._after_action(room)
 
     def _stop_timer(self, room):
@@ -333,6 +390,10 @@ class RoomManager:
                 code = gen_room_code()
             room = Room(code, client_id)
             room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
+            wanted = msg.get("bots")
+            if isinstance(wanted, int) and not isinstance(wanted, bool):
+                for _ in range(max(0, min(wanted, MAX_PLAYERS - 1))):
+                    self._add_bot(room)
             self.rooms[code] = room
             self.player_rooms[client_id] = code
             await self.broadcast_lobby(room)
@@ -409,6 +470,26 @@ class RoomManager:
                         return
                     room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
                 await self.broadcast_lobby(room)
+
+        elif mtype in ("add_bot", "remove_bot"):
+            room = self._get_room(client_id)
+            if not room:
+                return
+            if room.host_id != client_id or room.started:
+                await self.send(client_id, {"type": "error", "message": "Only the host can add or remove computers, before the game starts"})
+                return
+            if mtype == "add_bot":
+                if len(room.players) >= MAX_PLAYERS:
+                    await self.send(client_id, {"type": "error", "message": "Room full (max 8 players)"})
+                    return
+                self._add_bot(room)
+            else:
+                bid = msg.get("bot_id")
+                if bid not in room.bots:
+                    return
+                room.remove_player(bid)
+            self._touch(room)
+            await self.broadcast_lobby(room)
 
         elif mtype == "set_rules":
             room = self._get_room(client_id)
@@ -538,7 +619,7 @@ class RoomManager:
             if not (room.started and room.game and room.game.game_over):
                 return
             staying = [p.id for p in room.game.players
-                       if p.connected and p.id in self.connections and p.id in room.players]
+                       if p.id in room.players and (p.id in room.bots or (p.connected and p.id in self.connections))]
             if len(staying) < 2:
                 await self.send(client_id, {"type": "error", "message": "Need at least 2 players for a rematch"})
                 return
