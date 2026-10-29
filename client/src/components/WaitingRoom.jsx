@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import HowToPlay from './HowToPlay';
 
 const MAX_SEATS = 8;
 const AVATAR_COLORS = ['#2563EB', '#16A34A', '#DC2626', '#F59E0B', '#9333EA']; // the five suit colours
@@ -71,6 +72,7 @@ export default function WaitingRoom({ socket }) {
   const { room, clientId, startGame, takeSeat, setRules, leaveRoom } = socket;
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   const { players, host_id, room_code, last_result } = room;
   const watchers = room.spectators ?? 0;
@@ -103,6 +105,8 @@ export default function WaitingRoom({ socket }) {
       {/* felt: soft vignette + faint dotted watermark (same as the game table) */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(131,215,177,0.10),transparent_55%,rgba(0,0,0,0.55))]" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.12] bg-[radial-gradient(#83d7b1_1px,transparent_1px)] [background-size:16px_16px]" />
+
+      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} rules={rules} turnSeconds={TURN_SECONDS} />}
 
       <div className="relative z-10 flex min-h-[100dvh] items-center justify-center p-3 pt-16 sm:p-6">
         <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl bg-surface-container/85 p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
@@ -260,6 +264,13 @@ export default function WaitingRoom({ socket }) {
               className="min-h-[44px] w-full rounded-xl bg-surface-container-high text-sm font-bold text-white/90 transition hover:bg-surface-container-highest active:scale-[0.99] touch-manipulation"
             >
               Leave Room
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHelp(true)}
+              className="min-h-[40px] text-sm font-semibold text-on-surface-variant underline underline-offset-4 hover:text-white touch-manipulation"
+            >
+              How to play
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import WaitingRoom from './WaitingRoom';
 import RoomForm from './RoomForm';
 import Logo from './Logo';
+import HowToPlay from './HowToPlay';
 
 const NAME_MAX = 16;
 const NAME_KEY = 'whot_player_name';
@@ -44,6 +45,7 @@ function Glyphs() {
 export default function Lobby({ socket }) {
   const [mode, setMode] = useState(null);
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? '');
+  const [showHelp, setShowHelp] = useState(false);
 
   // the room forms can change the saved name; pick it up again when we come back
   useEffect(() => {
@@ -73,6 +75,8 @@ export default function Lobby({ socket }) {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(131,215,177,0.10),transparent_55%,rgba(0,0,0,0.55))]" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.12] bg-[radial-gradient(#83d7b1_1px,transparent_1px)] [background-size:16px_16px]" />
       <Glyphs />
+
+      {showHelp && <HowToPlay onClose={() => setShowHelp(false)} />}
 
       <div className="relative z-10 flex min-h-[100dvh] items-center justify-center p-3 pt-16 sm:p-6">
         <form
@@ -154,8 +158,11 @@ export default function Lobby({ socket }) {
             {!hasName ? 'Add your name to get started.' : 'Got a code? You can join to play, or just watch.'}
           </p>
 
-          <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold text-on-surface-variant">
-            Classic 54-card deck • 2 to 8 players
+          <div className="mt-5 flex items-center justify-between gap-3 border-t border-white/10 pt-4 text-[11px] font-semibold text-on-surface-variant">
+            <span>Classic 54-card deck • 2 to 8 players</span>
+            <button type="button" onClick={() => setShowHelp(true)} className="min-h-[36px] shrink-0 text-xs font-bold text-secondary underline underline-offset-4 touch-manipulation">
+              How to play
+            </button>
           </div>
         </form>
       </div>
