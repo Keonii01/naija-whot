@@ -45,7 +45,20 @@ export default function GameTable({ socket }) {
   const playableIds = new Set(gameState.playable_card_ids ?? []);
 
   const combos = gameState.combos ?? {};
-  const comboMates = new Set(selected.length ? (combos[selected[0]] ?? []) : []);
+  const holdFollow = gameState.hold_follow ?? {};
+  const cardOf = (id) => me?.hand.find((c) => c.id === id);
+  // ids that can join the current selection (a UI hint only, the server re-checks everything)
+  const addable = (() => {
+    if (!selected.length) return new Set();
+    const first = cardOf(selected[0]);
+    const last = cardOf(selected[selected.length - 1]);
+    const mates = combos[selected[0]] ?? [];
+    if (first?.number !== 1) return new Set(mates);        // normal same-number combo
+    if (last?.number !== 1) return new Set();              // chain already has its final card
+    return new Set([...mates, ...(holdFollow[last.id] ?? [])]);
+  })();
+  const canAddMore = [...addable].some((id) => !selected.includes(id));
+  const isChain = selected.length > 0 && cardOf(selected[0])?.number === 1;
 
   useEffect(() => { setSelected([]); }, [gameState.last_action, gameState.current_player_id]);
 
@@ -53,8 +66,8 @@ export default function GameTable({ socket }) {
   useEffect(() => { if (!isMyTurn) setPendingWhotIds(null); }, [isMyTurn]);
 
   const submitPlay = (ids) => {
-    const first = me?.hand.find((c) => c.id === ids[0]);
-    if (first?.shape === 'Whot') setPendingWhotIds(ids);
+    const last = me?.hand.find((c) => c.id === ids[ids.length - 1]);   // a Whot can only be the final card
+    if (last?.shape === 'Whot') setPendingWhotIds(ids);
     else { playCards(ids); setSelected([]); }
   };
 
@@ -62,9 +75,9 @@ export default function GameTable({ socket }) {
     if (!isMyTurn) return;
     const idx = selected.indexOf(card.id);
     if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }
-    if (selected.length && comboMates.has(card.id)) { setSelected([...selected, card.id]); return; }
+    if (selected.length && addable.has(card.id)) { setSelected([...selected, card.id]); return; }
     if (!playableIds.has(card.id)) return;
-    if (combos[card.id]?.length) { setSelected([card.id]); return; }
+    if (combos[card.id]?.length || holdFollow[card.id]?.length) { setSelected([card.id]); return; }
     submitPlay([card.id]);
   };
 
@@ -242,7 +255,7 @@ export default function GameTable({ socket }) {
               {selected.length > 0 && (
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-1">
                   <span className="basis-full text-center text-sm text-on-surface-variant">
-                    {selected.length} selected{comboMates.size > selected.length - 1 ? ': tap more of the same number to add' : ''}
+                    {selected.length} selected{canAddMore ? (isChain ? ': tap another Hold On, or the card to play after it' : ': tap more of the same number to add') : ''}
                   </span>
                   <button
                     onClick={() => submitPlay(selected)}

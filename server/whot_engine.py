@@ -290,21 +290,30 @@ class WhotGame:
                 return {"success": False, "error": "Card not in hand"}
             cards.append(card)
 
-        if not self._is_playable(cards[0]):
-            return {"success": False, "error": "Illegal move"}
-        if any(c.number != cards[0].number for c in cards):
-            return {"success": False, "error": "Combined cards must share the same number"}
+        # Hold On chain: one or more 1s, then one final card of another number
+        chain = []
+        if len(cards) > 1 and cards[0].number == 1 and cards[-1].number != 1:
+            chain, cards = cards[:-1], cards[-1:]
+            error = self._chain_error(chain, cards[0], chosen_shape)
+            if error:
+                return {"success": False, "error": error}
+        else:
+            if not self._is_playable(cards[0]):
+                return {"success": False, "error": "Illegal move"}
+            if any(c.number != cards[0].number for c in cards):
+                return {"success": False, "error": "Combined cards must share the same number"}
         if cards[0].shape == 'Whot' and chosen_shape not in [s for s in SHAPES if s != 'Whot']:
             return {"success": False, "error": "Choose a shape for Whot"}
-    
-        was_last_card = len(player.hand) == 1
-        for card in cards:
+
+        was_last_card = len(player.hand) == 1     # a chain always starts with 2+ cards, so it never needs the call
+        for card in chain + cards:
             player.hand.remove(card)
             self.discard_pile.append(card)
         self.free_play = False
         self.pending_shape = None
 
-        played = " + ".join(repr(c) for c in cards)
+        played = " + ".join(repr(c) for c in chain + cards)
+
         would_win = len(player.hand) == 0 and not self.is_action(cards[-1].number)
         if would_win and was_last_card and not player.last_card_called:
             return self._last_card_penalty(player, played)
@@ -317,6 +326,18 @@ class WhotGame:
         self.last_action = f"{player.name} played {played}. {msg}"
         self._check_market_end()
         return {"success": True, "message": self.last_action}
+
+    def _chain_error(self, chain, final, chosen_shape):
+        """Check a Hold On chain without touching the game: every leading card is a 1, the first 1 is
+        playable now, and the final card fits the last 1 (same shape, Whot, or anything with the any-card rule)."""
+        if any(c.number != 1 for c in chain):
+            return "Only Hold On cards can lead a chain"
+        if not self._is_playable(chain[0]):
+            return "Illegal move"
+        fits = final.shape == 'Whot' or self.rules["hold_on_any_card"] or final.shape == chain[-1].shape
+        if not fits:
+            return "Illegal move"
+        return None
 
     def _apply_combo(self, cards, player, chosen_shape):
         n = len(cards)
@@ -427,6 +448,7 @@ class WhotGame:
         is_player = me is not None
         my_turn = is_player and not self.game_over and self.current_player().id == player_id
         combos = {}
+        hold_follow = {}
         if my_turn:
             for c in self.playable_cards(me):
                 if c.number == 20:
@@ -434,8 +456,18 @@ class WhotGame:
                 mates = [o.id for o in me.hand if o.number == c.number and o.id != c.id]
                 if mates:
                     combos[c.id] = mates
+            if any(c.number == 1 for c in self.playable_cards(me)):
+                # a Hold On can lead a chain: for every 1 in hand, the cards that could follow it
+                for c in me.hand:
+                    if c.number != 1:
+                        continue
+                    follow = [o.id for o in me.hand if o.number != 1 and (
+                        o.shape == 'Whot' or self.rules["hold_on_any_card"] or o.shape == c.shape)]
+                    if follow:
+                        hold_follow[c.id] = follow
         return {
             "combos": combos,
+            "hold_follow": hold_follow,
             "playable_card_ids": [c.id for c in self.playable_cards(me)] if my_turn else [],
             "top_card": self.top_card.to_dict(),
             "pending_shape": self.pending_shape,
