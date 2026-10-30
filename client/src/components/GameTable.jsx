@@ -90,6 +90,13 @@ export default function GameTable({ socket }) {
   const handleShapeCancel = () => setPendingWhotIds(null);
 
   const currentPlayerName = gameState.players.find((p) => p.id === gameState.current_player_id)?.name;
+
+  // the permanent "what you must do now" line; it comes straight from the server state, so it clears the moment the penalty is taken
+  const mustDo = !isMyTurn || gameState.game_over ? null
+    : gameState.pending_pick > 0 ? `Pick ${gameState.pending_pick}, or answer with a ${gameState.top_card?.number}`
+    : gameState.free_play ? 'Free play: any card'
+    : 'Your turn: play normally';
+
   const isHost = gameState.host_id === clientId;
 
   // chip colours for the "Active: ..." pill and the called shape
@@ -182,9 +189,9 @@ export default function GameTable({ socket }) {
         {/* centre arena: rule chips, deck, discard, turn callout */}
         <div className="flex-1 min-h-[11rem] flex flex-col items-center justify-center gap-3">
           <div className="flex items-center justify-center gap-1.5 flex-wrap min-h-[1.5rem]">
-            {gameState.pending_pick > 0 && (
+            {gameState.pending_pick > 0 && !gameState.game_over && (
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EF4444] text-white shadow-md">
-                Pick {gameState.pending_pick} Active
+                Pick {gameState.pending_pick}: aimed at {isMyTurn ? 'you' : currentPlayerName}
               </span>
             )}
             {gameState.pending_shape && (
@@ -231,6 +238,12 @@ export default function GameTable({ socket }) {
               {isSpectator ? `${currentPlayerName}'s turn` : isMyTurn ? 'Your turn!' : `Waiting for ${currentPlayerName}…`}
             </span>
           </div>
+
+          {mustDo && (
+            <p role="status" className={`text-center text-xs sm:text-sm font-semibold ${gameState.pending_pick > 0 ? 'text-[#FCA5A5]' : 'text-on-surface-variant'}`}>
+              {mustDo}
+            </p>
+          )}
         </div>
 
         {/* hand dock */}

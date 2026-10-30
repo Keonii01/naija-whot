@@ -18,7 +18,7 @@ MAX_PLAYERS = 8
 SOLO_MAX_BOTS = 3          # a private game against the computer: you plus 1 to 3 computers
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
-BOT_DELAY = (1.0, 2.5)   # a computer thinks for a random 1 to 2.5 seconds before each move
+BOT_DELAY = (1.5, 4.5)   # a computer thinks for a random 1.5 to 4.5 seconds before each move
 
 # no 0/O/1/I so codes are never misread when typed or read aloud
 CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

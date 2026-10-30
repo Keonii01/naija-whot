@@ -472,6 +472,7 @@ class WhotGame:
             "top_card": self.top_card.to_dict(),
             "pending_shape": self.pending_shape,
             "pending_pick": self.pending_pick,
+            "free_play": self.free_play,
             "rules": self.rules,
             "deck_count": len(self.deck),
             "current_player_id": self.current_player().id,
