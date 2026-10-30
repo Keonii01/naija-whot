@@ -124,6 +124,7 @@ with TestClient(main.app) as c:
             m = H.receive_json()
             if m["type"] != "game_state": continue
             st = m["state"]
+            if "seen_host" not in globals(): seen_host = st.get("host_id"); check("6: game_state carries host_id (the owner), so the win screen shows the host buttons", seen_host == hid)
             if st["game_over"]: break
             if st["current_player_id"] != hid: continue
             me = next(p for p in st["players"] if p["id"] == hid)

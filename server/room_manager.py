@@ -155,6 +155,7 @@ class RoomManager:
         state = room.game.state_for(client_id)
         state["turn_deadline"] = room.turn_deadline
         state["turn_seconds"] = TURN_SECONDS
+        state["host_id"] = room.host_id                      # add this
         await self.send(client_id, {"type": "game_state", "state": state})
 
     async def broadcast_game_state(self, room):
@@ -162,11 +163,13 @@ class RoomManager:
             state = room.game.state_for(pid)
             state["turn_deadline"] = room.turn_deadline
             state["turn_seconds"] = TURN_SECONDS
+            state["host_id"] = room.host_id                  # add this
             await self.send(pid, {"type": "game_state", "state": state})
         for sid in list(room.spectators.keys()):
             state = room.game.state_for(sid)
             state["turn_deadline"] = room.turn_deadline
             state["turn_seconds"] = TURN_SECONDS
+            state["host_id"] = room.host_id                  # add this
             await self.send(sid, {"type": "game_state", "state": state})
 
     async def broadcast(self, room, payload):
