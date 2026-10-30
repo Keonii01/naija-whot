@@ -4,6 +4,7 @@ import OpponentPod from './OpponentPod';
 import ShapeModal from './ShapeModal';
 import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
+import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
 export default function GameTable({ socket }) {
@@ -61,6 +62,10 @@ export default function GameTable({ socket }) {
   const isChain = selected.length > 0 && cardOf(selected[0])?.number === 1;
 
   useEffect(() => { setSelected([]); }, [gameState.last_action, gameState.current_player_id]);
+
+  // the live action pill shows the special-move cue for 2.5s, then goes back to the plain log sentence
+  const cue = useCue(gameState.last_event, clientId, gameState.players);
+  const CUE_TONE = { danger: 'bg-[#EF4444] text-white', good: 'bg-gold text-emerald-deep', info: 'bg-surface-container-highest text-white' };
 
   // if the turn moves on (timer ran out, AFK) while the picker is open, close it
   useEffect(() => { if (!isMyTurn) setPendingWhotIds(null); }, [isMyTurn]);
@@ -166,9 +171,9 @@ export default function GameTable({ socket }) {
         )}
 
         {/* live action banner */}
-        <div className="mx-auto w-full max-w-md flex items-center gap-2 rounded-2xl bg-surface-container-high/85 backdrop-blur-xl px-3 py-1.5 shadow-lg">
-          <span className="shrink-0 w-2 h-2 rounded-full bg-secondary" />
-          <p className="text-sm font-medium leading-tight min-h-[2.25rem] flex items-center">{gameState.last_action}</p>
+        <div role="status" aria-live="polite" className={`mx-auto w-full max-w-md flex items-center gap-2 rounded-2xl backdrop-blur-xl px-3 py-1.5 shadow-lg transition-colors ${cue ? CUE_TONE[cue.tone] : 'bg-surface-container-high/85'}`}>
+          <span className={`shrink-0 w-2 h-2 rounded-full ${cue ? 'bg-current' : 'bg-secondary'}`} />
+          <p className={`text-sm leading-tight min-h-[2.25rem] flex items-center ${cue ? 'font-bold' : 'font-medium'}`}>{cue ? cue.text : gameState.last_action}</p>
         </div>
 
         {/* opponents */}
