@@ -119,6 +119,7 @@ export default function GameTable({ socket }) {
           clientId={clientId}
           isHost={isHost}
           isSpectator={isSpectator}
+          solo={socket.room?.solo}
           onPlayAgain={rematch}
           onBackToRoom={returnToLobby}
           onLeave={leaveRoom}

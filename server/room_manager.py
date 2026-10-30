@@ -15,6 +15,7 @@ LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
 AFK_LIMIT = 4        # consecutive missed turns before a player is removed (4 x 15s = one minute)
 MAX_PLAYERS = 8
+SOLO_MAX_BOTS = 3          # a private game against the computer: you plus 1 to 3 computers
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
 BOT_DELAY = (1.0, 2.5)   # a computer thinks for a random 1 to 2.5 seconds before each move
@@ -31,9 +32,11 @@ def gen_room_code():
 
 
 class Room:
-    def __init__(self, code, host_id):
+    def __init__(self, code, host_id, solo=False):
         self.code = code
         self.host_id = host_id
+        self.solo = solo           # private game against computers: nobody else can join or watch
+        self.owner_id = host_id    # only used for solo rooms (who may rejoin)
         self.players = {}
         self.order = []
         self.spectators = {}
@@ -72,6 +75,7 @@ class Room:
             "type": "room_update",
             "room_code": self.code,
             "host_id": self.host_id,
+            "solo": self.solo,
             "started": self.started,
             "players": [{"id": pid, "name": p.name, "is_bot": pid in self.bots} for pid, p in self.players.items()],
             "spectators": len(self.spectators),
@@ -388,9 +392,13 @@ class RoomManager:
             code = gen_room_code()
             while code in self.rooms:
                 code = gen_room_code()
-            room = Room(code, client_id)
+            solo = msg.get("solo") is True
+            room = Room(code, client_id, solo)
             room.add_player(client_id, clean_name(msg.get("player_name"), "Player"))
             wanted = msg.get("bots")
+            if solo:
+                wanted = wanted if isinstance(wanted, int) and not isinstance(wanted, bool) else 1
+                wanted = max(1, min(wanted, SOLO_MAX_BOTS))
             if isinstance(wanted, int) and not isinstance(wanted, bool):
                 for _ in range(max(0, min(wanted, MAX_PLAYERS - 1))):
                     self._add_bot(room)
@@ -401,7 +409,7 @@ class RoomManager:
         elif mtype == "join_room":
             code = msg.get("room_code", "").upper()
             room = self.rooms.get(code)
-            if not room:
+            if not room or room.solo:        # a solo room looks exactly like a room that does not exist
                 await self.send(client_id, {"type": "error", "message": "Room not found"})
                 return
             self._touch(room)
@@ -435,7 +443,7 @@ class RoomManager:
         elif mtype == "rejoin":
             code = msg.get("room_code", "").upper()
             room = self.rooms.get(code)
-            if not room:
+            if not room or (room.solo and client_id != room.owner_id):
                 await self.send(client_id, {"type": "rejoin_failed"})
                 return
 
@@ -479,6 +487,9 @@ class RoomManager:
                 await self.send(client_id, {"type": "error", "message": "Only the host can add or remove computers, before the game starts"})
                 return
             if mtype == "add_bot":
+                if room.solo and len(room.bots) >= SOLO_MAX_BOTS:
+                    await self.send(client_id, {"type": "error", "message": f"A solo game takes up to {SOLO_MAX_BOTS} computers"})
+                    return
                 if len(room.players) >= MAX_PLAYERS:
                     await self.send(client_id, {"type": "error", "message": "Room full (max 8 players)"})
                     return
@@ -487,6 +498,11 @@ class RoomManager:
                 bid = msg.get("bot_id")
                 if bid not in room.bots:
                     return
+
+                if room.solo and len(room.bots) <= 1:
+                    await self.send(client_id, {"type": "error", "message": "A solo game needs at least 1 computer"})
+                    return
+                
                 room.remove_player(bid)
             self._touch(room)
             await self.broadcast_lobby(room)

@@ -43,7 +43,7 @@ function Decor() {
   );
 }
 
-export default function MatchResult({ gameState, clientId, isHost, isSpectator, onPlayAgain, onBackToRoom, onLeave }) {
+export default function MatchResult({ gameState, clientId, isHost, isSpectator, solo, onPlayAgain, onBackToRoom, onLeave }) {
   const ranking = gameState.ranking ?? [];
   const winner = gameState.players.find((p) => p.id === gameState.winner_id);
   const youWon = gameState.winner_id === clientId;
@@ -160,7 +160,7 @@ export default function MatchResult({ gameState, clientId, isHost, isSpectator, 
                     onClick={onBackToRoom}
                     className="px-5 min-h-[52px] rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white font-semibold touch-manipulation"
                   >
-                    Waiting Room
+                    {solo ? 'Setup' : 'Waiting Room'}
                   </button>
                 </>
               ) : (

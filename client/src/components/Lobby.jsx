@@ -3,6 +3,7 @@ import WaitingRoom from './WaitingRoom';
 import RoomForm from './RoomForm';
 import HowToPlay from './HowToPlay';
 import Logo from './Logo';
+import SoloSetup from './SoloSetup';
 
 const NAME_MAX = 16;
 const NAME_KEY = 'whot_player_name';
@@ -52,7 +53,7 @@ export default function Lobby({ socket }) {
     if (!mode) setName(localStorage.getItem(NAME_KEY) ?? '');
   }, [mode]);
 
-  if (socket.room !== null) return <WaitingRoom socket={socket} />;
+  if (socket.room !== null) return socket.room.solo ? <SoloSetup socket={socket} /> : <WaitingRoom socket={socket} />;
   if (mode) return <RoomForm mode={mode} socket={socket} onBack={() => setMode(null)} />;
 
   const { connected } = socket;
@@ -155,7 +156,7 @@ export default function Lobby({ socket }) {
 
           <button
             type="button"
-            onClick={() => ready && socket.createRoom(name.trim(), 1)}
+            onClick={() => ready && socket.createRoom(name.trim(), 1, true)}
             disabled={!ready}
             className="mt-2.5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-tertiary-container/60 font-display text-base font-bold text-on-tertiary-container transition hover:bg-tertiary-container/80 active:scale-[0.99] disabled:opacity-40 touch-manipulation"
           >

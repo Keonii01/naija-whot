@@ -120,10 +120,10 @@ export function useWhotSocket() {
     }
   }, []);
 
-  const createRoom = (name, bots = 0) => {
+  const createRoom = (name, bots = 0, solo=false) => {
     localStorage.setItem('whot_player_name', name);
     localStorage.setItem('whot_spectating', '0');
-    send({ type: 'create_room', player_name: name, bots });
+    send({ type: 'create_room', player_name: name, bots, solo });
   };
 
   const joinRoom = (code, name, spectate = false) => {
