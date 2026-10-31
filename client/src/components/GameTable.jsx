@@ -81,7 +81,8 @@ export default function GameTable({ socket }) {
     if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }
     if (selected.length && addable.has(card.id)) { setSelected([...selected, card.id]); return; }
     if (!playableIds.has(card.id)) return;
-    if (extend[card.id]?.length) { setSelected([card.id]); return; }
+    // hints off: every tap only selects and you press Play; hints on: a card with nothing to add plays straight away
+    if (!hints || extend[card.id]?.length) { setSelected([card.id]); return; }
     submitPlay([card.id]);
   };
 
@@ -162,7 +163,7 @@ export default function GameTable({ socket }) {
               Hints: {hints ? 'on' : 'off'}
             </button>
           )}
-          
+
           {!isSpectator && !gameState.game_over && (
             <button
               onClick={() => window.confirm('Leave this game?') && leaveRoom()}
