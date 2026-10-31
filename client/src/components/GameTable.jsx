@@ -11,6 +11,9 @@ export default function GameTable({ socket }) {
   const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby, preview, previewPlay } = socket;
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
+  // optional help, off by default: ring the cards that can be added to a move (a personal setting, stays on this device)
+  const [hints, setHints] = useState(() => { try { return localStorage.getItem('whot_hints') === '1'; } catch { return false; } });
+  const toggleHints = () => setHints((h) => { try { localStorage.setItem('whot_hints', h ? '0' : '1'); } catch { /* private mode */ } return !h; });
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
   const prevStateRef = useRef(null);
 
@@ -149,6 +152,17 @@ export default function GameTable({ socket }) {
           <div className="flex-1 max-w-xl mx-auto">
             <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
           </div>
+
+          {!isSpectator && !gameState.game_over && (
+            <button
+              onClick={toggleHints}
+              aria-pressed={hints}
+              className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/10 border border-white/25 text-on-surface hover:bg-white/20 touch-manipulation"
+            >
+              Hints: {hints ? 'on' : 'off'}
+            </button>
+          )}
+          
           {!isSpectator && !gameState.game_over && (
             <button
               onClick={() => window.confirm('Leave this game?') && leaveRoom()}
@@ -270,7 +284,7 @@ export default function GameTable({ socket }) {
               {selected.length > 0 && (
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-1">
                   <span className="basis-full text-center text-sm text-on-surface-variant">
-                    {selected.length} selected{canAddMore ? ': tap another card to add it to this move' : ''}
+                    {selected.length} selected{hints && canAddMore ? ': tap another card to add it to this move' : ''}
                   </span>
                   <button
                     onClick={() => submitPlay(selected)}
@@ -295,7 +309,7 @@ export default function GameTable({ socket }) {
                 {me?.hand.map((card) => {
                   const pos = selected.indexOf(card.id);
                   return (
-                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : addable.has(card.id) ? 'is-addable' : ''}`}>
+                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : hints && addable.has(card.id) ? 'is-addable' : ''}`}>
                       {pos !== -1 && (
                         <span
                           className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
