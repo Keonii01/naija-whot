@@ -481,12 +481,12 @@ export default function GameTable({ socket }) {
             <div className="flex flex-col gap-2 sm:w-48 sm:shrink-0">
               {handCount === 1 && !gameState.game_over && (
                 me.last_card_called ? (
-                  <div className="self-center py-2 text-xs font-semibold text-secondary/80">✓ Last card called</div>
+                  <div className="self-end px-3 py-2 text-xs text-on-surface-variant/50">✓ Last card</div>
                 ) : (
                   <button
                     data-silent
                     onClick={lastCard}
-                    className="self-center touch-manipulation min-h-[40px] px-4 rounded-full border border-secondary/50 text-secondary/90 text-sm font-semibold tracking-wide hover:bg-secondary/10 active:bg-secondary/20"
+                    className="self-end touch-manipulation px-3 py-2 text-xs font-medium text-on-surface-variant/55 underline underline-offset-4 decoration-white/20 hover:text-on-surface-variant active:text-on-surface"
                   >
                     Last card
                   </button>
