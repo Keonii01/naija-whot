@@ -216,10 +216,12 @@ export const sounds = {
     tone({ freq: 262, end: 165, type: 'triangle', dur: 0.45, vol: 0.12, delay: LAND + 0.22, lp: 1200 });
   },
 
-  win() {
-    [523, 659, 784, 1047, 1319].forEach((f, i) => pluck(f, i * 0.11, 0.14, 0.5));
-    [523, 659, 784, 1047].forEach((f) => chime(f, 0.62, 0.1, 1.2));
-    for (let i = 0; i < 8; i++) chime((2000 + Math.random() * 2000), 0.7 + i * 0.1, 0.05, 0.5);
+  /* simple and clean: a rising "ding, ding, DING" */
+  win() { chime(784, 0, 0.14, 0.9); chime(1047, 0.15, 0.14, 1.0); chime(1319, 0.32, 0.16, 1.5); },
+  /* the market has run out: a low bell, then the cards being counted */
+  marketClosed() {
+    chime(392, 0, 0.15, 1.1); chime(196, 0, 0.1, 1.3);
+    [0.8, 1.2, 1.6, 2.0].forEach((d) => tone({ freq: 640, dur: 0.05, vol: 0.07, delay: d }));
   },
   lose() { [392, 349, 311, 262].forEach((f, i) => tone({ freq: f, dur: 0.5, vol: 0.12, delay: i * 0.22, lp: 1500, rev: true })); },
   error() { tone({ freq: 210, end: 140, type: 'triangle', dur: 0.14, vol: 0.12, lp: 900 }); },

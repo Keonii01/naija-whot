@@ -6,6 +6,8 @@ import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
 import CardFlight from './CardFlight';
 import DrawFlight from './DrawFlight';
+import MarketClosed from './MarketClosed';
+import { useMarketCount } from '../hooks/useMarketCount';
 import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
@@ -48,12 +50,15 @@ export default function GameTable({ socket }) {
     }
   }, [gameState, clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // when the market runs out, say so and count the cards before the result (and its sound) appears
+  const counting = useMarketCount(gameState);
+
   useEffect(() => {
-    if (!gameState.game_over) return;
+    if (!gameState.game_over || counting) return;
     if (gameState.winner_id === clientId) sounds.win();
     else if (!isSpectator) sounds.lose();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.game_over]);
+  }, [gameState.game_over, counting]);
 
   const playableIds = new Set(gameState.playable_card_ids ?? []);
 
@@ -258,7 +263,9 @@ export default function GameTable({ socket }) {
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(131,215,177,0.10),transparent_55%,rgba(0,0,0,0.55))]" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.12] bg-[radial-gradient(#83d7b1_1px,transparent_1px)] [background-size:16px_16px]" />
 
-      {gameState.game_over && (
+      {gameState.game_over && counting && <MarketClosed />}
+
+      {gameState.game_over && !counting && (
         <MatchResult
           gameState={gameState}
           clientId={clientId}

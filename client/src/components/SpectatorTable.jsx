@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import Card from './Card';
 import OpponentPod from './OpponentPod';
 import MatchResult from './MatchResult';
+import MarketClosed from './MarketClosed';
+import { useMarketCount } from '../hooks/useMarketCount';
 import { sounds } from '../utils/sounds';
 
 const SUIT_CHIP = {
@@ -40,6 +42,7 @@ const Eye = ({ className = 'h-4 w-4' }) => (
 export default function SpectatorTable({ socket }) {
   const { gameState, room, clientId, rematch, returnToLobby, leaveRoom } = socket;
   const prevSeq = useRef(null);
+  const counting = useMarketCount(gameState);
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
 
   // the same move sounds the players hear
@@ -71,7 +74,9 @@ export default function SpectatorTable({ socket }) {
         <span className="absolute bottom-28 right-32 rotate-45 text-9xl text-primary/10">✚</span>
       </div>
 
-      {gameState.game_over && (
+      {gameState.game_over && counting && <MarketClosed />}
+
+      {gameState.game_over && !counting && (
         <MatchResult
           gameState={gameState}
           clientId={clientId}
