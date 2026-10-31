@@ -515,6 +515,7 @@ class WhotGame:
             "pending_shape": self.pending_shape,
             "pending_pick": self.pending_pick,
             "free_play": self.free_play,
+            "discard_count": len(self.discard_pile),
             "last_event": self.last_event,
             "rules": self.rules,
             "deck_count": len(self.deck),

@@ -118,4 +118,14 @@ g = game(2, [[('Circle',4),('Circle',6)], []])
 ok(g, "p0", [('Circle',4)]); seqs.append(ev(g)["seq"]); g.draw_card("p1"); seqs.append(ev(g)["seq"]); ok(g, "p0", [('Circle',6)]); seqs.append(ev(g)["seq"])
 check("seq goes up with every move", seqs == sorted(set(seqs)) and len(seqs) == 3)
 
+# ---- discard_count: how many cards are on the discard pile (the table draws a backing card only when there is more than one) ----
+g = game(2, [[('Circle',4)], []])
+check("discard_count: one card on the pile at the start", g.state_for("p0")["discard_count"] == 1)
+ok(g, "p0", [('Circle',4)])
+check("discard_count: grows when a card is played", g.state_for("p1")["discard_count"] == 2)
+g = game(2, [[('Circle',4)], []]); g.discard_pile = [W.WhotCard('Star',3), W.WhotCard('Star',5), W.WhotCard('Star',6), W.WhotCard('Circle',9)]
+g.deck = [W.WhotCard('Square',7)]
+g.draw_from_deck(g.get_player("p0"), 2)
+check("discard_count: back to one after the deck runs out and the pile is reshuffled", g.state_for("p0")["discard_count"] == 1 and g.top_card.number == 9)
+
 print("ALL PASSED")

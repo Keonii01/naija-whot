@@ -5,6 +5,7 @@ import ShapeModal from './ShapeModal';
 import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
 import CardFlight from './CardFlight';
+import DrawFlight from './DrawFlight';
 import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
@@ -134,6 +135,65 @@ export default function GameTable({ socket }) {
     return () => clearTimeout(t);
   }, [flights]);
 
+  // ---- drawn cards slide from the deck to whoever drew them (visual only) ----
+  const deckRef = useRef(null);
+  const prevHandIds = useRef(me ? me.hand.map((c) => c.id) : []);
+  const prevCounts = useRef(Object.fromEntries(gameState.players.map((p) => [p.id, p.card_count])));
+  const [draws, setDraws] = useState(null);                 // card backs in the air
+  const [hiddenIds, setHiddenIds] = useState(() => new Set()); // my new cards stay hidden until their card back lands
+
+  useLayoutEffect(() => {
+    const handIds = me ? me.hand.map((c) => c.id) : [];
+    const counts = Object.fromEntries(gameState.players.map((p) => [p.id, p.card_count]));
+    const beforeIds = prevHandIds.current;
+    const beforeCounts = prevCounts.current;
+    prevHandIds.current = handIds;
+    prevCounts.current = counts;
+    const seq = gameState.last_event?.seq;
+    if (!seq) return;                                       // a fresh deal, nothing was drawn
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const deckEl = deckRef.current?.querySelector('.wc');
+    if (!deckEl) return;
+    const d = deckEl.getBoundingClientRect();
+    const base = { left: d.left, top: d.top, width: d.width, height: d.height };
+
+    const list = [];
+    handIds.filter((id) => !beforeIds.includes(id)).slice(0, 8).forEach((id, i) => {
+      const el = document.querySelector(`[data-card-id="${id}"] .wc`);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      list.push({ key: `draw-${seq}-${id}`, mine: id, base, dx: r.left - d.left, dy: r.top - d.top, scale: r.width / d.width, delay: i * 110, endOpacity: 1 });
+    });
+    gameState.players.forEach((p) => {
+      if (p.id === clientId) return;
+      const delta = p.card_count - (beforeCounts[p.id] ?? p.card_count);
+      const pod = delta > 0 ? document.querySelector(`[data-pod="${p.id}"]`) : null;
+      if (!pod) return;
+      const r = pod.getBoundingClientRect();
+      const s = 0.4;
+      for (let i = 0; i < Math.min(delta, 4); i++) {
+        list.push({
+          key: `draw-${seq}-${p.id}-${i}`, base,
+          dx: r.left + r.width / 2 - (d.width * s) / 2 - d.left, dy: r.top + r.height / 2 - (d.height * s) / 2 - d.top,
+          scale: s, delay: i * 110, endOpacity: 0,
+        });
+      }
+    });
+    if (!list.length) return;
+    setHiddenIds(new Set(list.filter((f) => f.mine).map((f) => f.mine)));
+    setDraws(list);
+  }, [gameState.last_event?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const drawLanded = (f) => {
+    if (f.mine) setHiddenIds((prev) => { const n = new Set(prev); n.delete(f.mine); return n; });
+    setDraws((prev) => (prev ? prev.filter((x) => x.key !== f.key) : prev));
+  };
+  useEffect(() => {          // safety net, e.g. a hidden tab can pause animations
+    if (!draws || !draws.length) return undefined;
+    const t = setTimeout(() => { setDraws(null); setHiddenIds(new Set()); }, 2000);
+    return () => clearTimeout(t);
+  }, [draws]);
+
   const submitPlay = (ids) => {
     const last = me?.hand.find((c) => c.id === ids[ids.length - 1]);   // a Whot can only be the final card
     if (last?.shape === 'Whot') setPendingWhotIds(ids);
@@ -205,6 +265,7 @@ export default function GameTable({ socket }) {
       )}
 
       {flights && flights.list.map((f) => <CardFlight key={f.key} flight={f} to={flights.to} onDone={landed} />)}
+      {draws && draws.map((f) => <DrawFlight key={f.key} flight={f} onDone={drawLanded} />)}
 
       {pendingWhotIds && (
         <ShapeModal
@@ -287,7 +348,7 @@ export default function GameTable({ socket }) {
 
           <div className="flex items-start justify-center gap-6 sm:gap-14">
             <div className="flex flex-col items-center gap-2">
-              <div className="relative">
+              <div ref={deckRef} className="relative">
                 <div className="absolute inset-0 rounded-xl translate-x-1 translate-y-2 bg-surface-container-highest opacity-70" />
                 <div className="absolute inset-0 rounded-xl translate-x-0.5 translate-y-1 bg-primary-container opacity-85" />
                 <Card faceDown size="lg" />
@@ -299,7 +360,9 @@ export default function GameTable({ socket }) {
 
             <div className="flex flex-col items-center gap-2">
               <div className="relative">
-                <div className="absolute inset-0 rounded-xl bg-white/70 -rotate-[7deg] translate-y-0.5 opacity-60" />
+                {(gameState.discard_count ?? 2) > 1 && (
+                  <div className="absolute inset-0 rounded-xl bg-white/70 -rotate-[7deg] translate-y-0.5 opacity-60" />
+                )}
                 <div ref={pileRef} className="relative rotate-2">
                   <Card card={heldTop ?? top} size="lg" />
                 </div>
@@ -378,7 +441,7 @@ export default function GameTable({ socket }) {
                 {me?.hand.map((card) => {
                   const pos = selected.indexOf(card.id);
                   return (
-                    <div key={card.id} data-card-id={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : hints && addable.has(card.id) ? 'is-addable' : ''}`}>
+                    <div key={card.id} data-card-id={card.id} style={hiddenIds.has(card.id) ? { visibility: 'hidden' } : undefined} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : hints && addable.has(card.id) ? 'is-addable' : ''}`}>
                       {pos !== -1 && (
                         <span
                           className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"
