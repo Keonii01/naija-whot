@@ -15,7 +15,7 @@ export default function GameTable({ socket }) {
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   // optional help, off by default: ring the cards that can be added to a move (a personal setting, stays on this device)
   const [hints, setHints] = useState(() => { try { return localStorage.getItem('whot_hints') === '1'; } catch { return false; } });
-  const toggleHints = () => setHints((h) => { try { localStorage.setItem('whot_hints', h ? '0' : '1'); } catch { /* private mode */ } return !h; });
+  const toggleHints = () => { sounds.tap(); setHints((h) => { try { localStorage.setItem('whot_hints', h ? '0' : '1'); } catch { /* private mode */ } return !h; }); };
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
   const prevStateRef = useRef(null);
 
@@ -26,20 +26,27 @@ export default function GameTable({ socket }) {
     : gameState.players.filter((p) => p.id !== clientId);
   const isMyTurn = !isSpectator && gameState.current_player_id === clientId;
 
-  // 🔊 Sound effects on state transitions
+  // 🔊 Sound effects: one sound for each move the server reports, plus the table's own moments
   useEffect(() => {
     const prev = prevStateRef.current;
-    if (prev) {
-      if (prev.last_action !== gameState.last_action) {
-        if (gameState.last_action?.toLowerCase().includes('draw')) sounds.cardDraw();
-        else sounds.cardPlay();
-      }
-      if (prev.current_player_id !== gameState.current_player_id && gameState.current_player_id === clientId) {
-        sounds.yourTurn();
-      }
-    }
     prevStateRef.current = gameState;
-  }, [gameState, clientId]);
+    if (!prev) {
+      if (!gameState.last_event) sounds.deal();             // a fresh deal (not a reload in the middle of a game)
+      return;
+    }
+    if (prev.game_over && !gameState.game_over) sounds.deal(); // rematch
+    const ev = gameState.last_event;
+    if (ev && ev.seq !== prev.last_event?.seq) {
+      sounds.forEvent(ev, isSpectator ? null : clientId);
+      if ((prev.discard_count ?? 0) > 1 && gameState.discard_count === 1) sounds.shuffle(); // the pile was reshuffled into the deck
+    }
+    if (!gameState.game_over && prev.current_player_id !== gameState.current_player_id && gameState.current_player_id === clientId) {
+      sounds.yourTurn();
+    }
+    if (gameState.players.some((p) => p.last_card_called && !prev.players.find((q) => q.id === p.id)?.last_card_called)) {
+      sounds.lastCardCall();
+    }
+  }, [gameState, clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!gameState.game_over) return;
@@ -203,8 +210,8 @@ export default function GameTable({ socket }) {
   const handleCardClick = (card) => {
     if (!isMyTurn) return;
     const idx = selected.indexOf(card.id);
-    if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }
-    if (selected.length && addable.has(card.id)) { setSelected([...selected, card.id]); return; }
+    if (idx !== -1) { sounds.deselect(); setSelected(selected.slice(0, idx)); return; }
+    if (selected.length && addable.has(card.id)) { sounds.select(); setSelected([...selected, card.id]); return; }
     if (!playableIds.has(card.id)) return;
     // hints off: every tap only selects and you press Play; hints on: a card with nothing to add plays straight away
     if (!hints || extend[card.id]?.length) { setSelected([card.id]); return; }
@@ -280,7 +287,7 @@ export default function GameTable({ socket }) {
         {/* top HUD: timer bar + Leave (pl-12 leaves room for the mute button) */}
         <div className="flex items-center gap-3 pl-12 min-h-10">
           <div className="flex-1 max-w-xl mx-auto">
-            <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} />
+            <TurnTimer deadline={gameState.turn_deadline} totalSeconds={TURN_SECONDS} tick={isMyTurn && !gameState.game_over} />
           </div>
 
           {!isSpectator && !gameState.game_over && (

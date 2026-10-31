@@ -39,17 +39,15 @@ const Eye = ({ className = 'h-4 w-4' }) => (
 
 export default function SpectatorTable({ socket }) {
   const { gameState, room, clientId, rematch, returnToLobby, leaveRoom } = socket;
-  const prevAction = useRef(null);
+  const prevSeq = useRef(null);
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
 
-  // same card sounds the players hear
+  // the same move sounds the players hear
   useEffect(() => {
-    if (prevAction.current !== null && prevAction.current !== gameState.last_action) {
-      if (gameState.last_action?.toLowerCase().includes('draw')) sounds.cardDraw();
-      else sounds.cardPlay();
-    }
-    prevAction.current = gameState.last_action;
-  }, [gameState.last_action]);
+    const seq = gameState.last_event?.seq ?? 0;
+    if (prevSeq.current !== null && seq && prevSeq.current !== seq) sounds.forEvent(gameState.last_event, null);
+    prevSeq.current = seq;
+  }, [gameState.last_event?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const players = gameState.players;
   const n = players.length;

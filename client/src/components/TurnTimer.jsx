@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { sounds } from '../utils/sounds';
 
 /** Seconds left until the server's turn deadline (null deadline = not ticking). */
 export function useCountdown(deadline, totalSeconds = 30) {
@@ -17,8 +18,17 @@ export function useCountdown(deadline, totalSeconds = 30) {
 }
 
 /** Three-colour turn timer bar (green, then gold, then red), as in the Stitch table HUD. */
-export default function TurnTimer({ deadline, totalSeconds = 30 }) {
-  const { pct, active } = useCountdown(deadline, totalSeconds);
+export default function TurnTimer({ deadline, totalSeconds = 30, tick = false }) {
+  const { remaining, pct, active } = useCountdown(deadline, totalSeconds);
+
+  // a soft tick for the last three seconds of my own turn
+  const lastTick = useRef(null);
+  useEffect(() => {
+    if (!tick || !deadline) return;
+    const left = Math.ceil(deadline - Date.now() / 1000);
+    const mark = `${deadline}-${left}`;
+    if (left >= 1 && left <= 3 && lastTick.current !== mark) { lastTick.current = mark; sounds.tick(left === 1); }
+  }, [remaining, tick, deadline]);
   const color = pct > 50 ? 'bg-primary' : pct > 20 ? 'bg-secondary' : 'bg-[#EF4444]';
 
   return (
