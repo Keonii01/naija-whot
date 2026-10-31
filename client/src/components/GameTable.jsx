@@ -8,7 +8,7 @@ import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
 export default function GameTable({ socket }) {
-  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby } = socket;
+  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby, preview, previewPlay } = socket;
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
@@ -45,21 +45,17 @@ export default function GameTable({ socket }) {
 
   const playableIds = new Set(gameState.playable_card_ids ?? []);
 
-  const combos = gameState.combos ?? {};
-  const holdFollow = gameState.hold_follow ?? {};
-  const cardOf = (id) => me?.hand.find((c) => c.id === id);
-  // ids that can join the current selection (a UI hint only, the server re-checks everything)
+  // Cards that could be added to the current selection. The server decides: one selected card comes with the
+  // game state (extend), a longer selection is asked for with preview_play. This is only a hint, the move is re-checked on play.
+  const extend = gameState.extend ?? {};
   const addable = (() => {
     if (!selected.length) return new Set();
-    const first = cardOf(selected[0]);
-    const last = cardOf(selected[selected.length - 1]);
-    const mates = combos[selected[0]] ?? [];
-    if (first?.number !== 1) return new Set(mates);        // normal same-number combo
-    if (last?.number !== 1) return new Set();              // chain already has its final card
-    return new Set([...mates, ...(holdFollow[last.id] ?? [])]);
+    if (selected.length === 1) return new Set(extend[selected[0]] ?? []);
+    const fresh = preview && preview.ids.length === selected.length && preview.ids.every((id, i) => id === selected[i]);
+    return new Set(fresh ? preview.next : []);
   })();
   const canAddMore = [...addable].some((id) => !selected.includes(id));
-  const isChain = selected.length > 0 && cardOf(selected[0])?.number === 1;
+  useEffect(() => { if (selected.length >= 2) previewPlay(selected); }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setSelected([]); }, [gameState.last_action, gameState.current_player_id]);
 
@@ -82,7 +78,7 @@ export default function GameTable({ socket }) {
     if (idx !== -1) { setSelected(selected.slice(0, idx)); return; }
     if (selected.length && addable.has(card.id)) { setSelected([...selected, card.id]); return; }
     if (!playableIds.has(card.id)) return;
-    if (combos[card.id]?.length || holdFollow[card.id]?.length) { setSelected([card.id]); return; }
+    if (extend[card.id]?.length) { setSelected([card.id]); return; }
     submitPlay([card.id]);
   };
 
@@ -274,7 +270,7 @@ export default function GameTable({ socket }) {
               {selected.length > 0 && (
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mb-1">
                   <span className="basis-full text-center text-sm text-on-surface-variant">
-                    {selected.length} selected{canAddMore ? (isChain ? ': tap another Hold On, or the card to play after it' : ': tap more of the same number to add') : ''}
+                    {selected.length} selected{canAddMore ? ': tap another card to add it to this move' : ''}
                   </span>
                   <button
                     onClick={() => submitPlay(selected)}
@@ -299,7 +295,7 @@ export default function GameTable({ socket }) {
                 {me?.hand.map((card) => {
                   const pos = selected.indexOf(card.id);
                   return (
-                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : ''}`}>
+                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : addable.has(card.id) ? 'is-addable' : ''}`}>
                       {pos !== -1 && (
                         <span
                           className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"

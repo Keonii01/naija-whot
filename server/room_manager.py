@@ -572,6 +572,17 @@ class RoomManager:
                     f"You draw {result['drawn']} cards."})
             await self._after_action(room)
 
+        elif mtype == "preview_play":
+            # which cards could legally be added to the cards the player has selected (a hint, never a move)
+            room = self._get_room(client_id)
+            if not room or not room.game:
+                return
+            ids = msg.get("card_ids")
+            if not isinstance(ids, list) or len(ids) > 20 or not all(isinstance(i, str) for i in ids):
+                return
+            await self.send(client_id, {"type": "play_preview", "card_ids": ids,
+                                        "next": room.game.next_cards(client_id, ids)})
+
         elif mtype == "draw_card":
             room = self._get_room(client_id)
             if not room or not room.game:

@@ -1,3 +1,4 @@
+import copy
 import random
 import uuid
 
@@ -114,7 +115,16 @@ class WhotGame:
         self.ranking = []
         self.end_reason = None
         self.last_action = "Game started!"
+        self.event_seq = 0
+        self.last_event = None          # the headline of the latest move, for the table's cue banner
         self._deal()
+
+    def _event(self, type, actor_id, target_ids=(), amount=0, card=None, shape=None):
+        """Record what just happened as data (public information only, never anyone's hand)."""
+        self.event_seq += 1
+        self.last_event = {"seq": self.event_seq, "type": type, "actor_id": actor_id,
+                           "target_ids": list(target_ids), "amount": amount,
+                           "card": card.to_dict() if card else None, "shape": shape}
 
     def _deal(self):
         for _ in range(self.hand_size):
@@ -254,6 +264,7 @@ class WhotGame:
         """Played the final card without calling Last Card: no win, draw penalty cards."""
         drawn = self.draw_from_deck(player, LAST_CARD_PENALTY)
         self._advance()
+        self._event("last_card", player.id, [player.id], len(drawn))
         self.last_action = (f"{player.name} played {played} without calling Last Card! "
                             f"No win - draws {len(drawn)} cards.")
         self._check_market_end()
@@ -277,6 +288,34 @@ class WhotGame:
         return self.play_cards(player_id, [card_id], chosen_shape)
 
     def play_cards(self, player_id, card_ids, chosen_shape=None):
+        """Play the selected cards as one move. The cards are split into groups of equal numbers and played
+        in the order selected, exactly as if you played one group at a time: every group before the last must
+        leave the turn with the same player (Hold On, General Market, or a Suspension that skips everyone else).
+        The move is checked on a throwaway copy first, so an illegal move changes nothing."""
+        trial = copy.deepcopy(self)
+        result = trial._play_cards(player_id, card_ids, chosen_shape)
+        if not result["success"]:
+            return result
+        return self._play_cards(player_id, card_ids, chosen_shape)
+
+    def next_cards(self, player_id, card_ids):
+        """Ids of the cards in this player's hand that could legally be added after the selected cards."""
+        player = self.get_player(player_id)
+        if player is None or self.game_over or self.current_player().id != player_id:
+            return []
+        have = {c.id for c in player.hand}
+        if len(set(card_ids)) != len(card_ids) or any(i not in have for i in card_ids):
+            return []
+        more = []
+        for c in player.hand:
+            if c.id in card_ids:
+                continue
+            trial = copy.deepcopy(self)
+            if trial._play_cards(player_id, list(card_ids) + [c.id], "Star")["success"]:
+                more.append(c.id)
+        return more
+
+    def _play_cards(self, player_id, card_ids, chosen_shape=None):
         player = self.get_player(player_id)
         if player is None or self.current_player().id != player_id:
             return {"success": False, "error": "Not your turn"}
@@ -290,54 +329,53 @@ class WhotGame:
                 return {"success": False, "error": "Card not in hand"}
             cards.append(card)
 
-        # Hold On chain: one or more 1s, then one final card of another number
-        chain = []
-        if len(cards) > 1 and cards[0].number == 1 and cards[-1].number != 1:
-            chain, cards = cards[:-1], cards[-1:]
-            error = self._chain_error(chain, cards[0], chosen_shape)
-            if error:
-                return {"success": False, "error": error}
-        else:
-            if not self._is_playable(cards[0]):
+        groups = []                       # runs of equal numbers, in the order selected
+        for c in cards:
+            if groups and groups[-1][0].number == c.number:
+                groups[-1].append(c)
+            else:
+                groups.append([c])
+
+        was_last_card = len(player.hand) == 1     # a longer move never needs the call
+        played = " + ".join(repr(c) for c in cards)
+        messages, headline = [], None
+        for i, group in enumerate(groups):
+            is_last = i == len(groups) - 1
+            if not self._is_playable(group[0]):
                 return {"success": False, "error": "Illegal move"}
-            if any(c.number != cards[0].number for c in cards):
-                return {"success": False, "error": "Combined cards must share the same number"}
-        if cards[0].shape == 'Whot' and chosen_shape not in [s for s in SHAPES if s != 'Whot']:
-            return {"success": False, "error": "Choose a shape for Whot"}
+            if group[0].shape == 'Whot' and chosen_shape not in [s for s in SHAPES if s != 'Whot']:
+                return {"success": False, "error": "Choose a shape for Whot"}
+            for card in group:
+                player.hand.remove(card)
+                self.discard_pile.append(card)
+            self.free_play = False
+            self.pending_shape = None
 
-        was_last_card = len(player.hand) == 1     # a chain always starts with 2+ cards, so it never needs the call
-        for card in chain + cards:
-            player.hand.remove(card)
-            self.discard_pile.append(card)
-        self.free_play = False
-        self.pending_shape = None
+            if is_last:
+                would_win = len(player.hand) == 0 and not self.is_action(group[-1].number)
+                if would_win and was_last_card and not player.last_card_called:
+                    return self._last_card_penalty(player, played)
+                if would_win:
+                    self._finish("win", player)
+                    self._event("win", player.id, card=group[-1])
+                    self.last_action = f"{player.name} played {played} and WINS! \U0001F389"
+                    return {"success": True, "game_over": True, "winner": player.name}
 
-        played = " + ".join(repr(c) for c in chain + cards)
+            msg = self._apply_combo(group, player, chosen_shape if is_last else None)
+            if msg:
+                messages.append(msg)
+            if not is_last:
+                if self.game_over or self.current_player().id != player.id:
+                    return {"success": False, "error": "Nothing can be played after that card"}
+                if self.last_event and self.last_event["type"] in ("general_market", "suspended"):
+                    headline = dict(self.last_event)      # keep the loud part of the move for the cue banner
 
-        would_win = len(player.hand) == 0 and not self.is_action(cards[-1].number)
-        if would_win and was_last_card and not player.last_card_called:
-            return self._last_card_penalty(player, played)
-        if would_win:
-            self._finish("win", player)
-            self.last_action = f"{player.name} played {played} and WINS! 🎉"
-            return {"success": True, "game_over": True, "winner": player.name}
-
-        msg = self._apply_combo(cards, player, chosen_shape)
-        self.last_action = f"{player.name} played {played}. {msg}"
+        if headline and self.last_event["type"] == "play":
+            headline["seq"] = self.last_event["seq"]
+            self.last_event = headline
+        self.last_action = f"{player.name} played {played}. {' '.join(messages)}"
         self._check_market_end()
         return {"success": True, "message": self.last_action}
-
-    def _chain_error(self, chain, final, chosen_shape):
-        """Check a Hold On chain without touching the game: every leading card is a 1, the first 1 is
-        playable now, and the final card fits the last 1 (same shape, Whot, or anything with the any-card rule)."""
-        if any(c.number != 1 for c in chain):
-            return "Only Hold On cards can lead a chain"
-        if not self._is_playable(chain[0]):
-            return "Illegal move"
-        fits = final.shape == 'Whot' or self.rules["hold_on_any_card"] or final.shape == chain[-1].shape
-        if not fits:
-            return "Illegal move"
-        return None
 
     def _apply_combo(self, cards, player, chosen_shape):
         n = len(cards)
@@ -346,10 +384,12 @@ class WhotGame:
         if number == 20:
             self.pending_shape = chosen_shape
             self._advance()
+            self._event("whot", player.id, card=cards[-1], shape=self.pending_shape)
             return f"Whot! Shape locked to {self.pending_shape}."
 
         if number == 1:
             self.free_play = self.rules["hold_on_any_card"]
+            self._event("hold_on", player.id, [player.id], n, cards[-1])
             return "Hold On: plays again, any card!" if self.free_play else "Hold On: plays again."
 
         if number == 2 or (number == 5 and self.rules["pick_three_action"]):
@@ -359,23 +399,29 @@ class WhotGame:
                 if len(self.players) == 2:
                     return self._counter_two_player(player, amount, label)
                 if self.rules["cancel_penalties"]:
-                    return self._counter_cancel(amount, label)
+                    return self._counter_cancel(player, amount, label)
             self.pending_pick += amount
             self._advance()
+            self._event("pick", player.id, [self.current_player().id], self.pending_pick, cards[-1])
             return f"{label}! Pending pick now {self.pending_pick}."
 
         if number == 8:
             # skip one player per card, but never more than everyone else
+            skipped = [self.players[(self.current_idx + 1 + i) % len(self.players)].id
+                       for i in range(min(n, len(self.players) - 1))]
             self._advance(1 + min(n, len(self.players) - 1))
+            self._event("suspended", player.id, skipped, len(skipped), cards[-1])
             return "Suspension! Next player skipped." if n == 1 else f"Suspension x{n}! Players skipped."
 
         if number == 14:
             for p in self.players:
                 if p.id != player.id:
                     self.draw_from_deck(p, n)
+            self._event("general_market", player.id, [p.id for p in self.players if p.id != player.id], n, cards[-1])
             return f"General Market! Everyone else draws {n}. Play again."
 
         self._advance()
+        self._event("play", player.id, card=cards[-1])
         return ""
 
     def _counter_two_player(self, player, amount, label):
@@ -386,24 +432,29 @@ class WhotGame:
         if net == 0:
             self.pending_pick = 0
             self._advance()
+            self._event("cancelled", player.id, [], amount)
             return f"{label} cancelled out. Nobody picks."
         if net > 0:
             drawn = self.draw_from_deck(player, net)
             self.pending_pick = 0
             self._advance()
+            self._event("blocked", player.id, [player.id], len(drawn))
             return f"{player.name} blocks part of it and picks {len(drawn)}."
         self.pending_pick = -net
         self._advance()
+        self._event("pick", player.id, [self.current_player().id], self.pending_pick)
         return f"Countered! Pending pick now {self.pending_pick}, back to the other player."
 
-    def _counter_cancel(self, amount, label):
+    def _counter_cancel(self, player, amount, label):
         """3+ players, cancel variant: a counter cancels the same number of penalty cards; whatever is
         left, from either side, goes live against the next player (who can counter it or pick)."""
         net = abs(self.pending_pick - amount)
         self.pending_pick = net
         self._advance()
         if net == 0:
+            self._event("cancelled", player.id, [], amount)
             return f"{label} cancelled out. Nobody picks."
+        self._event("pick", player.id, [self.current_player().id], net)
         return f"Countered! Pending pick now {net}."
 
     def draw_card(self, player_id):
@@ -419,12 +470,14 @@ class WhotGame:
             msg = f"{player.name} picks {len(drawn)} cards!"
             self.pending_pick = 0
             self._advance()
+            self._event("pick_taken", player.id, [player.id], len(drawn))
             self.last_action = msg
             self._check_market_end()
             return {"success": True, "message": msg}
 
         drawn = self.draw_from_deck(player, 1)
         self._advance()
+        self._event("draw", player.id, [player.id], len(drawn))
         self.last_action = f"{player.name} draws a card."
         self._check_market_end()
         return {"success": True, "message": self.last_action}
@@ -435,11 +488,12 @@ class WhotGame:
         if not player:
             return
         if self.pending_pick > 0:
-            self.draw_from_deck(player, self.pending_pick)
+            drawn = self.draw_from_deck(player, self.pending_pick)
             self.pending_pick = 0
         else:
-            self.draw_from_deck(player, 1)
+            drawn = self.draw_from_deck(player, 1)
         self._advance()
+        self._event("timeout_draw", player.id, [player.id], len(drawn))
         self.last_action = f"⏱️ {player.name} ran out of time and drew a card."
         self._check_market_end()
 
@@ -447,32 +501,21 @@ class WhotGame:
         me = self.get_player(player_id)
         is_player = me is not None
         my_turn = is_player and not self.game_over and self.current_player().id == player_id
-        combos = {}
-        hold_follow = {}
+        extend = {}
         if my_turn:
+            # for each card that can start a move: the cards that could legally be added to it
             for c in self.playable_cards(me):
-                if c.number == 20:
-                    continue  # Whot cards can't be combined
-                mates = [o.id for o in me.hand if o.number == c.number and o.id != c.id]
-                if mates:
-                    combos[c.id] = mates
-            if any(c.number == 1 for c in self.playable_cards(me)):
-                # a Hold On can lead a chain: for every 1 in hand, the cards that could follow it
-                for c in me.hand:
-                    if c.number != 1:
-                        continue
-                    follow = [o.id for o in me.hand if o.number != 1 and (
-                        o.shape == 'Whot' or self.rules["hold_on_any_card"] or o.shape == c.shape)]
-                    if follow:
-                        hold_follow[c.id] = follow
+                more = self.next_cards(player_id, [c.id])
+                if more:
+                    extend[c.id] = more
         return {
-            "combos": combos,
-            "hold_follow": hold_follow,
+            "extend": extend,
             "playable_card_ids": [c.id for c in self.playable_cards(me)] if my_turn else [],
             "top_card": self.top_card.to_dict(),
             "pending_shape": self.pending_shape,
             "pending_pick": self.pending_pick,
             "free_play": self.free_play,
+            "last_event": self.last_event,
             "rules": self.rules,
             "deck_count": len(self.deck),
             "current_player_id": self.current_player().id,

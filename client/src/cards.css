@@ -267,6 +267,12 @@ button.wc:focus-visible { outline: 3px solid rgba(255, 201, 77, 0.55); outline-o
 }
 .wc-hand-slot { position: relative; width: var(--cw); }
 .wc-hand-slot.is-selected { z-index: 5; }
+/* a card that could be added to the current selection */
+.wc-hand-slot.is-addable { z-index: 4; }
+.wc-hand-slot.is-addable::after {
+  content: ""; position: absolute; inset: 0; border-radius: 12px; pointer-events: none;
+  box-shadow: 0 0 0 3px rgba(255, 201, 77, 0.85), 0 0 14px rgba(255, 201, 77, 0.45);
+}
 
 /* opponents' fan of card backs: only when there is plenty of height */
 .pod-fan { display: none; }

@@ -22,6 +22,7 @@ export function useWhotSocket() {
   const [gameState, setGameState] = useState(null);
   const [error, setError] = useState(null);
   const [gameOver, setGameOver] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   const wsRef = useRef(null);
   const clientIdRef = useRef(null);
@@ -69,6 +70,9 @@ export function useWhotSocket() {
           break;
         case 'game_state':
           setGameState(msg.state);
+          break;
+        case 'play_preview':
+          setPreview({ ids: msg.card_ids, next: msg.next });
           break;
         case 'error':
           setError(msg.message);
@@ -146,6 +150,7 @@ export function useWhotSocket() {
     gameState,
     error,
     gameOver,
+    preview,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -156,6 +161,7 @@ export function useWhotSocket() {
     setRules: (rules) => send({ type: 'set_rules', rules }),
     playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
+    previewPlay: (cardIds) => send({ type: 'preview_play', card_ids: cardIds }),
     drawCard: () => send({ type: 'draw_card' }),
     rematch: () => send({ type: 'rematch' }),
     lastCard: () => send({ type: 'last_card' }),

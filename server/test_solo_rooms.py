@@ -141,4 +141,27 @@ with TestClient(main.app) as c:
         ru = until(H, lambda m: m["type"] == "room_update" and not m["started"])
         check("6: back at the setup, still solo, computer still seated", ru["solo"] is True and sum(p["is_bot"] for p in ru["players"]) == 1)
 
+# ---- 7. preview_play: which cards could be added next ----
+with TestClient(main.app) as c:
+    with c.websocket_connect(f"/ws/{tok('a')}") as H:
+        hid = welcome(H); solo(H, bots=1)
+        H.send_json({"type": "start_game"})
+        st = until(H, is_type("game_state"))["state"]
+        while st["current_player_id"] != hid:
+            st = until(H, lambda m: m["type"] == "game_state")["state"]
+        me = next(p for p in st["players"] if p["id"] == hid); mine = {x["id"] for x in me["hand"]}
+        check("7: game_state carries extend (a map of card id to the ids that can be added)", isinstance(st["extend"], dict) and set(st["extend"]) <= set(st["playable_card_ids"]))
+        first = st["playable_card_ids"][0] if st["playable_card_ids"] else None
+        if first:
+            H.send_json({"type": "preview_play", "card_ids": [first]})
+            pv = until(H, is_type("play_preview"))
+            check("7: preview_play answers with the same ids and only cards from your own hand", pv["card_ids"] == [first] and set(pv["next"]) <= mine - {first})
+            check("7: the preview agrees with the extend map", set(pv["next"]) == set(st["extend"].get(first, [])))
+        H.send_json({"type": "preview_play", "card_ids": "nonsense"})
+        H.send_json({"type": "preview_play", "card_ids": [1, 2]})
+        H.send_json({"type": "preview_play", "card_ids": ["x"] * 30})
+        H.send_json({"type": "preview_play", "card_ids": ["not-a-card"]})
+        pv = until(H, is_type("play_preview"))
+        check("7: junk input is ignored; an unknown card id just gets an empty answer", pv["card_ids"] == ["not-a-card"] and pv["next"] == [])
+
 print("ALL PASSED")
