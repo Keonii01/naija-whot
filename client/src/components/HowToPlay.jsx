@@ -112,7 +112,7 @@ export default function HowToPlay({ onClose, rules = STANDARD, turnSeconds = 15 
         </Section>
 
         <Section title="Last Card">
-          <p>When you are down to one card, press <b>LAST CARD</b> before you play it. Win from one card without pressing it and you don&rsquo;t win: you pick 5 cards instead.</p>
+          <p>When you are down to one card, tap the small <b>Last card</b> link above the Draw Card button before you play it. Win from one card without calling it and you don&rsquo;t win: you pick 5 cards instead. Playing your whole hand in a single move wins without the call.</p>
           <p>If your last card is an action card ({actionList}), you can play it but it doesn&rsquo;t win. Finish on a normal number card.</p>
         </Section>
 

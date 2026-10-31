@@ -4,6 +4,8 @@ import OpponentPod from './OpponentPod';
 import MatchResult from './MatchResult';
 import MarketClosed from './MarketClosed';
 import { useMarketCount } from '../hooks/useMarketCount';
+import { useCue } from '../hooks/useCue';
+import { CUE_TONE } from '../cues';
 import { sounds } from '../utils/sounds';
 
 const SUIT_CHIP = {
@@ -41,16 +43,30 @@ const Eye = ({ className = 'h-4 w-4' }) => (
 
 export default function SpectatorTable({ socket }) {
   const { gameState, room, clientId, rematch, returnToLobby, leaveRoom } = socket;
-  const prevSeq = useRef(null);
+  const prevState = useRef(null);
   const counting = useMarketCount(gameState);
+  const cue = useCue(gameState.last_event, clientId, gameState.players); // the same cue pill the players see
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
 
-  // the same move sounds the players hear
+  // the same sounds the players hear, from the side of the table
   useEffect(() => {
-    const seq = gameState.last_event?.seq ?? 0;
-    if (prevSeq.current !== null && seq && prevSeq.current !== seq) sounds.forEvent(gameState.last_event, null);
-    prevSeq.current = seq;
-  }, [gameState.last_event?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
+    const prev = prevState.current;
+    prevState.current = gameState;
+    if (!prev) return;
+    const ev = gameState.last_event;
+    if (ev && ev.seq !== prev.last_event?.seq) {
+      sounds.forEvent(ev, null);
+      if ((prev.discard_count ?? 0) > 1 && gameState.discard_count === 1) sounds.shuffle(); // the pile was reshuffled
+    }
+    if (prev.game_over && !gameState.game_over) sounds.deal(); // rematch
+    if (gameState.players.some((p) => p.last_card_called && !prev.players.find((q) => q.id === p.id)?.last_card_called)) {
+      sounds.lastCardCall();
+    }
+  }, [gameState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {          // the result (after the market-closed count, if there was one)
+    if (gameState.game_over && !counting) sounds.win();
+  }, [gameState.game_over, counting]);
 
   const players = gameState.players;
   const n = players.length;
@@ -152,7 +168,7 @@ export default function SpectatorTable({ socket }) {
                 <div className="flex min-h-[1.5rem] flex-wrap items-center justify-center gap-1.5">
                   {gameState.pending_pick > 0 && (
                     <span className="rounded-full bg-[#EF4444] px-2.5 py-0.5 text-[11px] font-bold text-white shadow-md">
-                      Pick {gameState.pending_pick} Active
+                      Pick {gameState.pending_pick}: aimed at {currentName}
                     </span>
                   )}
                   {calledShape && (
@@ -196,12 +212,12 @@ export default function SpectatorTable({ socket }) {
         </div>
 
         {/* bottom dock: no hand, just the live commentary */}
-        <div className="mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl bg-surface-container-high/85 px-3 py-2 shadow-lg backdrop-blur-xl">
+        <div role="status" aria-live="polite" className={`mx-auto flex w-full max-w-3xl items-center gap-3 rounded-2xl px-3 py-2 shadow-lg backdrop-blur-xl transition-colors ${cue ? CUE_TONE[cue.tone] : 'bg-surface-container-high/85'}`}>
           <span className="flex shrink-0 items-center gap-1.5 text-xs font-bold text-tertiary">
             <Eye className="h-4 w-4" /> <span className="hidden sm:inline">Watching</span>
           </span>
           <span className="h-5 w-px shrink-0 bg-white/15" />
-          <p className="flex min-h-[2.25rem] min-w-0 flex-1 items-center text-sm font-medium leading-tight">{gameState.last_action}</p>
+          <p className={`flex min-h-[2.25rem] min-w-0 flex-1 items-center text-sm leading-tight ${cue ? 'font-bold' : 'font-medium'}`}>{cue ? cue.text : gameState.last_action}</p>
         </div>
       </div>
     </div>

@@ -4,6 +4,9 @@
 
 const CARD_NAMES = { 1: 'Hold On', 2: 'Pick Two', 5: 'Pick Three', 8: 'Suspension', 14: 'General Market', 20: 'Whot' };
 
+// how the cue pill is tinted: red when something hits you, gold for good news, grey for information
+export const CUE_TONE = { danger: 'bg-[#EF4444] text-white', good: 'bg-gold text-emerald-deep', info: 'bg-surface-container-highest text-white' };
+
 export function describeEvent(event, clientId, players) {
   if (!event) return null;
   const isYou = (id) => id === clientId;
