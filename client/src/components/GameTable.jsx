@@ -15,7 +15,7 @@ export default function GameTable({ socket }) {
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   // optional help, off by default: ring the cards that can be added to a move (a personal setting, stays on this device)
   const [hints, setHints] = useState(() => { try { return localStorage.getItem('whot_hints') === '1'; } catch { return false; } });
-  const toggleHints = () => { sounds.tap(); setHints((h) => { try { localStorage.setItem('whot_hints', h ? '0' : '1'); } catch { /* private mode */ } return !h; }); };
+  const toggleHints = () => { setHints((h) => { try { localStorage.setItem('whot_hints', h ? '0' : '1'); } catch { /* private mode */ } return !h; }); };
   const [pendingWhotIds, setPendingWhotIds] = useState(null);
   const prevStateRef = useRef(null);
 
@@ -427,6 +427,7 @@ export default function GameTable({ socket }) {
                   </span>
                   <button
                     onClick={() => submitPlay(selected)}
+                    data-silent
                     className="bg-gold hover:bg-gold-hover text-emerald-deep font-display font-bold px-5 min-h-[44px] rounded-xl touch-manipulation"
                   >
                     Play {selected.length > 1 ? `${selected.length} cards` : 'this card'}
@@ -479,6 +480,7 @@ export default function GameTable({ socket }) {
                 ) : (
                   <button
                     onClick={lastCard}
+                    data-silent
                     className="lastcard-glow touch-manipulation w-full min-h-[52px] rounded-xl bg-[#EF4444] active:bg-red-700 text-white text-lg font-extrabold tracking-wide"
                   >
                     LAST CARD!
@@ -487,6 +489,7 @@ export default function GameTable({ socket }) {
               )}
               <button
                 onClick={drawCard}
+                data-silent
                 disabled={!isMyTurn}
                 className="w-full min-h-[48px] rounded-xl bg-gold hover:bg-gold-hover text-emerald-deep font-display font-bold shadow-[0_4px_14px_rgba(255,201,77,0.35)] disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2 touch-manipulation"
               >

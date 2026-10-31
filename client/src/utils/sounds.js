@@ -153,10 +153,36 @@ function fwip(delay = 0) {
 export const sounds = {
   cardPlay() { swoosh(0); slap(LAND); },
   cardDraw(n = 1) { for (let i = 0; i < Math.min(n, 6); i++) fwip(i * 0.11); },
-  deal(n = 5) { for (let i = 0; i < n; i++) { fwip(i * 0.09); tone({ freq: 500 + i * 60, dur: 0.03, vol: 0.04, delay: i * 0.09 + 0.1 }); } },
+  /* a clean "new round": cards dealt onto the table one by one, then a soft chime. Noise only, no blips. */
+  deal(n = 5) {
+    for (let i = 0; i < n; i++) {
+      noise({ dur: 0.05, vol: 0.17, delay: i * 0.1, f0: 1900 * jit(0.12), f1: 900, q: 0.9 });
+      tone({ freq: 150 * jit(0.05), end: 90, dur: 0.06, vol: 0.1, delay: i * 0.1 });
+    }
+    chime(1047, n * 0.1 + 0.04, 0.08, 0.7);
+  },
   shuffle() {
     for (let i = 0; i < 14; i++) noise({ dur: 0.035, vol: 0.07 + Math.random() * 0.05, delay: i * 0.035 + Math.random() * 0.01, f0: 2500 + Math.random() * 1500, q: 0.7 });
     tone({ freq: 120, end: 70, dur: 0.18, vol: 0.12, delay: 0.5 });
+  },
+
+  /* button sounds (the page's buttons are wired up in App.jsx) */
+  click() { tone({ freq: 760 * jit(0.03), end: 560, dur: 0.045, vol: 0.08 }); },
+  confirm() { pluck(659, 0, 0.1, 0.16); pluck(988, 0.07, 0.11, 0.22); },
+  back() { tone({ freq: 560, end: 380, dur: 0.07, vol: 0.08 }); },
+  toggleOn() { tone({ freq: 520, end: 740, dur: 0.07, vol: 0.1 }); tone({ freq: 880, dur: 0.08, vol: 0.08, delay: 0.05 }); },
+  toggleOff() { tone({ freq: 740, end: 500, dur: 0.07, vol: 0.09 }); tone({ freq: 400, dur: 0.07, vol: 0.06, delay: 0.05 }); },
+  join() { chime(880, 0, 0.1, 0.45); chime(1319, 0.1, 0.1, 0.5); },
+  leave() { tone({ freq: 520, end: 340, dur: 0.16, vol: 0.09, lp: 1400 }); },
+  uiClick(el) {
+    const role = el.getAttribute('role');
+    const pressed = el.getAttribute('aria-pressed');
+    const on = role === 'switch' ? el.getAttribute('aria-checked') : pressed;
+    if (role === 'switch' || pressed !== null) { (on === 'true' ? this.toggleOff : this.toggleOn).call(this); return; }
+    const label = ((el.textContent || '') + ' ' + (el.getAttribute('aria-label') || '')).trim().toLowerCase();
+    if (/^(back|cancel|leave|close|no\b)/.test(label) || /\b(leave|close|cancel)\b/.test(label)) { this.back(); return; }
+    if (typeof el.className === 'string' && el.className.includes('bg-gold')) { this.confirm(); return; }
+    this.click();
   },
 
   select() { tone({ freq: 620 * jit(0.03), end: 760, dur: 0.06, vol: 0.1 }); },

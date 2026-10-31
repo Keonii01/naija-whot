@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import HowToPlay from './HowToPlay';
+import { sounds } from '../utils/sounds';
 
 const MAX_SEATS = 8;
 const AVATAR_COLORS = ['#2563EB', '#16A34A', '#DC2626', '#F59E0B', '#9333EA']; // the five suit colours
@@ -89,6 +90,14 @@ export default function WaitingRoom({ socket }) {
   const [showHelp, setShowHelp] = useState(false);
 
   const { players, host_id, room_code, last_result } = room;
+
+  // a small sound when someone sits down at the table or leaves it
+  const seats = useRef(players.length);
+  useEffect(() => {
+    if (players.length > seats.current) sounds.join();
+    else if (players.length < seats.current) sounds.leave();
+    seats.current = players.length;
+  }, [players.length]);
   const watchers = room.spectators ?? 0;
   const TURN_SECONDS = room.turn_seconds ?? 15;
   const isWatcher = !players.some((p) => p.id === clientId);

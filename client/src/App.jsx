@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useWhotSocket } from './hooks/useWhotSocket';
 import Splash from './components/Splash';
 import Lobby from './components/Lobby';
@@ -12,6 +12,17 @@ export default function App() {
   const [muted, setMutedState] = useState(isMuted());
   const [splashDone, setSplashDone] = useState(false);
 
+  // a sound for every button, switch and choice on every screen (a button can opt out with data-silent)
+  useEffect(() => {
+    const onClick = (e) => {
+      const el = e.target.closest?.('button, [role="switch"], [role="radio"]');
+      if (!el || el.disabled || el.closest('[data-silent]') || el.closest('.wc-hand-slot')) return;
+      sounds.uiClick(el);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, []);
+
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
@@ -24,6 +35,7 @@ export default function App() {
       {!splashDone && <Splash ready={socket.connected} onDone={() => setSplashDone(true)} />}
       <button
         onClick={toggleMute}
+        data-silent
         aria-pressed={muted}
         aria-label={muted ? 'Turn sound on' : 'Turn sound off'}
         title={muted ? 'Sound is off' : 'Sound is on'}
