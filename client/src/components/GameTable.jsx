@@ -1,9 +1,10 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import Card from './Card';
 import OpponentPod from './OpponentPod';
 import ShapeModal from './ShapeModal';
 import TurnTimer from './TurnTimer';
 import MatchResult from './MatchResult';
+import CardFlight from './CardFlight';
 import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
@@ -69,10 +70,74 @@ export default function GameTable({ socket }) {
   // if the turn moves on (timer ran out, AFK) while the picker is open, close it
   useEffect(() => { if (!isMyTurn) setPendingWhotIds(null); }, [isMyTurn]);
 
+  // ---- cards slide to the pile (visual only; the state underneath has already moved on) ----
+  const pileRef = useRef(null);          // the top card of the discard pile: where a card lands
+  const outgoing = useRef(null);         // where my own cards were when I played them
+  const prevTop = useRef(gameState.top_card);
+  const [flights, setFlights] = useState(null);   // { to, list } while cards are in the air
+  const [heldTop, setHeldTop] = useState(null);   // the old top card, shown on the pile until the new one lands
+
+  const recordOutgoing = (ids) => {
+    const cards = ids.map((id) => {
+      const card = me?.hand.find((c) => c.id === id);
+      const el = document.querySelector(`[data-card-id="${id}"] .wc`);
+      return card && el ? { card, rect: el.getBoundingClientRect() } : null;
+    }).filter(Boolean);
+    outgoing.current = cards.length === ids.length ? { cards } : null;
+  };
+
+  useLayoutEffect(() => {
+    const now = gameState.top_card;
+    const before = prevTop.current;
+    prevTop.current = now;
+    const mine = outgoing.current;
+    outgoing.current = null;
+    if (!now || !before || now.id === before.id) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const el = pileRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const to = { left: r.left + (r.width - w) / 2, top: r.top + (r.height - h) / 2, width: w, height: h };
+
+    let list = [];
+    if (mine && mine.cards.length && mine.cards[mine.cards.length - 1].card.id === now.id) {
+      list = mine.cards.map((c, i) => ({
+        key: `${now.id}-${i}`, card: c.card, fromLeft: c.rect.left, fromTop: c.rect.top,
+        scale: c.rect.width / w, delay: i * 110, startOpacity: 1,
+      }));
+    } else {
+      const actor = gameState.last_event?.actor_id;
+      const pod = actor && actor !== clientId ? document.querySelector(`[data-pod="${actor}"]`) : null;
+      if (pod) {
+        const p = pod.getBoundingClientRect();
+        const s = 0.45;
+        list = [{
+          key: `${now.id}-0`, card: now,
+          fromLeft: p.left + p.width / 2 - (w * s) / 2, fromTop: p.top + p.height / 2 - (h * s) / 2,
+          scale: s, delay: 0, startOpacity: 0.4,
+        }];
+      }
+    }
+    if (!list.length) return;
+    setHeldTop(before);
+    setFlights({ to, list });
+  }, [gameState.top_card?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const landed = (key) => {
+    if (flights && key === flights.list[flights.list.length - 1].key) { setFlights(null); setHeldTop(null); }
+  };
+  useEffect(() => {          // safety net, e.g. a hidden tab can pause animations
+    if (!flights) return undefined;
+    const t = setTimeout(() => { setFlights(null); setHeldTop(null); }, 1500);
+    return () => clearTimeout(t);
+  }, [flights]);
+
   const submitPlay = (ids) => {
     const last = me?.hand.find((c) => c.id === ids[ids.length - 1]);   // a Whot can only be the final card
     if (last?.shape === 'Whot') setPendingWhotIds(ids);
-    else { playCards(ids); setSelected([]); }
+    else { recordOutgoing(ids); playCards(ids); setSelected([]); }
   };
 
   const handleCardClick = (card) => {
@@ -87,6 +152,7 @@ export default function GameTable({ socket }) {
   };
 
   const handleShapeSelect = (shape) => {
+    recordOutgoing(pendingWhotIds);
     playCards(pendingWhotIds, shape);
     setPendingWhotIds(null);
     setSelected([]);
@@ -137,6 +203,8 @@ export default function GameTable({ socket }) {
           onLeave={leaveRoom}
         />
       )}
+
+      {flights && flights.list.map((f) => <CardFlight key={f.key} flight={f} to={flights.to} onDone={landed} />)}
 
       {pendingWhotIds && (
         <ShapeModal
@@ -232,8 +300,8 @@ export default function GameTable({ socket }) {
             <div className="flex flex-col items-center gap-2">
               <div className="relative">
                 <div className="absolute inset-0 rounded-xl bg-white/70 -rotate-[7deg] translate-y-0.5 opacity-60" />
-                <div className="relative rotate-2">
-                  <Card card={top} size="lg" />
+                <div ref={pileRef} className="relative rotate-2">
+                  <Card card={heldTop ?? top} size="lg" />
                 </div>
               </div>
               <span className={`text-xs font-semibold px-3 py-0.5 rounded-full shadow ${activeChip}`}>
@@ -310,7 +378,7 @@ export default function GameTable({ socket }) {
                 {me?.hand.map((card) => {
                   const pos = selected.indexOf(card.id);
                   return (
-                    <div key={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : hints && addable.has(card.id) ? 'is-addable' : ''}`}>
+                    <div key={card.id} data-card-id={card.id} className={`wc-hand-slot ${pos !== -1 ? 'is-selected' : hints && addable.has(card.id) ? 'is-addable' : ''}`}>
                       {pos !== -1 && (
                         <span
                           className="absolute left-1 z-10 bg-gold text-emerald-deep text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center"

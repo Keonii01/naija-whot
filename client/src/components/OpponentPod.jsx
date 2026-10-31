@@ -29,6 +29,7 @@ export default function OpponentPod({ player, isCurrent, isHost, deadline, total
           </svg>
         )}
         <div
+          data-pod={player.id}
           className={`w-8 h-8 sm:w-11 sm:h-11 rounded-full flex items-center justify-center font-display font-bold text-sm sm:text-base shadow-md ${
             isCurrent ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-high text-on-surface'
           }`}
