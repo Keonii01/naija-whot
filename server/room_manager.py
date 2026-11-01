@@ -15,6 +15,7 @@ LOBBY_GRACE = 60     # empty waiting room is deleted after this
 GAME_GRACE = 300     # empty game room is deleted after this
 AFK_LIMIT = 4        # consecutive missed turns before a player is removed (4 x 15s = one minute)
 MAX_PLAYERS = 8
+T_MIN_PLAYERS = 3          # a tournament needs at least this many players
 SOLO_MAX_BOTS = 3          # a private game against the computer: you plus 1 to 3 computers
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
@@ -29,6 +30,15 @@ def clean_name(raw, default):
 
 def gen_room_code():
     return ''.join(random.choices(CODE_CHARS, k=5))
+
+
+def tournament_worst(ranking):
+    """Who is out after a match: the player(s) with the highest card total.
+    One player means they are out; several means those players play off."""
+    if not ranking:
+        return []
+    worst = max(r["points"] for r in ranking)
+    return [r["id"] for r in ranking if r["points"] == worst]
 
 
 class Room:
@@ -51,6 +61,8 @@ class Room:
         self.afk = {}              # player id -> consecutive missed turns
         self.last_result = None    # shown in the waiting room after a game
         self.rules = dict(DEFAULT_RULES)   # house rules, set by the host before the game starts
+        self.tournament = False    # host option: play a knock-out tournament instead of a single game
+        self.t = None              # tournament state while one is running (public information)
 
     def add_player(self, player_id, name):
         if player_id in self.players:
@@ -76,6 +88,8 @@ class Room:
             "room_code": self.code,
             "host_id": self.host_id,
             "solo": self.solo,
+            "tournament": self.tournament,
+            "t": self.t,
             "started": self.started,
             "players": [{"id": pid, "name": p.name, "is_bot": pid in self.bots} for pid, p in self.players.items()],
             "spectators": len(self.spectators),
@@ -84,12 +98,14 @@ class Room:
             "turn_seconds": TURN_SECONDS,
         }
 
-    def start_game(self):
-        # fresh Player objects every time, so a rematch never inherits old hands
-        fresh = [Player(pid, self.players[pid].name) for pid in self.order]
+    def start_game(self, ids=None):
+        # fresh Player objects every time, so a rematch never inherits old hands.
+        # ids (tournament): only these players sit at the table, everyone else keeps their seat in the room.
+        seat_ids = [pid for pid in self.order if ids is None or pid in ids]
+        fresh = [Player(pid, self.players[pid].name) for pid in seat_ids]
         for p in fresh:
             p.is_bot = p.id in self.bots
-        self.players = {p.id: p for p in fresh}
+        self.players.update({p.id: p for p in fresh})
         self.game = WhotGame(fresh, self.rules)
         self.started = True
         self.afk = {}
@@ -156,6 +172,7 @@ class RoomManager:
         state["turn_deadline"] = room.turn_deadline
         state["turn_seconds"] = TURN_SECONDS
         state["host_id"] = room.host_id                      # add this
+        state["t"] = room.t
         await self.send(client_id, {"type": "game_state", "state": state})
 
     async def broadcast_game_state(self, room):
@@ -164,12 +181,14 @@ class RoomManager:
             state["turn_deadline"] = room.turn_deadline
             state["turn_seconds"] = TURN_SECONDS
             state["host_id"] = room.host_id                  # add this
+            state["t"] = room.t
             await self.send(pid, {"type": "game_state", "state": state})
         for sid in list(room.spectators.keys()):
             state = room.game.state_for(sid)
             state["turn_deadline"] = room.turn_deadline
             state["turn_seconds"] = TURN_SECONDS
             state["host_id"] = room.host_id                  # add this
+            state["t"] = room.t
             await self.send(sid, {"type": "game_state", "state": state})
 
     async def broadcast(self, room, payload):
@@ -258,10 +277,16 @@ class RoomManager:
     async def _reset_to_lobby(self, room):
         """Game finished: everyone goes back to the waiting room of the same room."""
         game = room.game
-        winner = game.get_player(game.winner_id) if game.winner_id else None
-        room.last_result = {"winner": winner.name if winner else None, "reason": game.end_reason}
-        staying = [p.id for p in game.players
-                   if p.id in room.players and (p.id in room.bots or (p.connected and p.id in self.connections))]
+        if room.t is not None:
+            # a tournament: everyone still connected stays, including the players who were knocked out
+            room.last_result = {"winner": room.t.get("champion_name"), "reason": "tournament"}
+            staying = [pid for pid in room.order if pid in room.bots or pid in self.connections]
+            room.t = None
+        else:
+            winner = game.get_player(game.winner_id) if game.winner_id else None
+            room.last_result = {"winner": winner.name if winner else None, "reason": game.end_reason}
+            staying = [p.id for p in game.players
+                       if p.id in room.players and (p.id in room.bots or (p.connected and p.id in self.connections))]
         for pid in list(room.order):
             if pid not in staying:
                 room.remove_player(pid)                  # gone players don't carry over
@@ -280,6 +305,8 @@ class RoomManager:
         room.game.remove_player(pid, "was removed for being inactive")
         room.remove_player(pid)
         room.afk.pop(pid, None)
+        if room.t is not None:
+            self._t_out(room, pid, "inactive")
         self.player_rooms.pop(pid, None)
         await self.send(pid, {"type": "kicked", "message": "You were removed from the game for being inactive."})
         if pid == room.host_id:
@@ -294,8 +321,96 @@ class RoomManager:
         if room.game.game_over:
             self._stop_timer(room)
             await self.broadcast_game_state(room)
+            if room.t is not None and room.t["stage"] == "match":
+                await self._t_match_over(room)
         else:
             await self.start_turn_timer(room)
+
+    # ---------------- Tournament ----------------
+    # A tournament is a series of normal games in one room. After each match the player with the highest card
+    # total is out (a tie for the highest total is settled by a play-off between just those players). Before
+    # every next game each player who is still in taps Ready; the host can remove anyone who is not. The last
+    # player left is the champion. room.t holds the state; it is public information and is sent to everyone.
+
+    def _t_out(self, room, pid, reason):
+        t = room.t
+        if t is None or pid not in t["alive"]:
+            return
+        t["alive"].remove(pid)
+        if pid in t["players"]:
+            t["players"].remove(pid)
+        if pid in t["ready"]:
+            t["ready"].remove(pid)
+        t["out"].append({"id": pid, "name": t["names"].get(pid, "Player"), "reason": reason})
+
+    async def _t_begin(self, room):
+        ids = list(room.order)
+        room.t = {
+            "round": 1, "stage": "match", "kind": "match",
+            "alive": list(ids), "players": list(ids), "ready": [], "out": [],
+            "champion": None, "champion_name": None,
+            "names": {pid: room.players[pid].name for pid in ids},
+        }
+        room.start_game(ids)
+        await self.start_turn_timer(room)
+        await self.broadcast_lobby(room)
+
+    async def _t_match_over(self, room):
+        t, game = room.t, room.game
+        seated = [p.id for p in game.players]       # who was still at the table when the match ended
+        if len(seated) > 1:
+            worst = tournament_worst(game.ranking)
+            if len(worst) == 1:
+                self._t_out(room, worst[0], "play-off" if t["kind"] == "playoff" else "highest total")
+            else:
+                t["kind"], t["players"] = "playoff", list(worst)   # a tie: just these players play off
+                await self._t_begin_ready(room)
+                return
+        await self._t_after_elimination(room)
+
+    async def _t_after_elimination(self, room):
+        t = room.t
+        if len(t["alive"]) <= 1:
+            await self._t_finish(room, t["alive"][0] if t["alive"] else None)
+            return
+        t["kind"], t["players"] = "match", list(t["alive"])        # everyone still in plays the next match
+        t["round"] += 1
+        await self._t_begin_ready(room)
+
+    async def _t_begin_ready(self, room):
+        t = room.t
+        t["stage"] = "ready"
+        t["ready"] = [pid for pid in t["players"] if pid in room.bots]   # computers are always ready
+        await self._t_check_ready(room)
+
+    async def _t_check_ready(self, room):
+        t = room.t
+        if t is None or t["stage"] != "ready":
+            return
+        if len(t["players"]) >= 2 and all(pid in t["ready"] for pid in t["players"]):
+            t["stage"], t["ready"] = "match", []
+            room.start_game(t["players"])
+            await self.start_turn_timer(room)
+        else:
+            await self.broadcast_game_state(room)
+
+    async def _t_finish(self, room, champion_id):
+        t = room.t
+        t["stage"], t["players"], t["ready"] = "done", [], []
+        t["champion"] = champion_id
+        t["champion_name"] = t["names"].get(champion_id) if champion_id else None
+        await self.broadcast_game_state(room)
+        await self.broadcast_lobby(room)
+
+    async def _t_after_drop(self, room):
+        """Someone left or was removed. Between matches that may change who plays next."""
+        t = room.t
+        if t is None or t["stage"] != "ready":
+            return                  # a running match carries on; if it ends by forfeit _t_match_over deals with it
+        if len(t["players"]) < 2:
+            await self._t_after_elimination(room)    # nobody to play against (or no play-off needed)
+        else:
+            await self._t_check_ready(room)
 
     # ---------------- Turn Timer ----------------
 
@@ -458,6 +573,10 @@ class RoomManager:
                 if p:
                     p.connected = True
                     await self.broadcast_game_state(room)
+                elif client_id in room.players:
+                    # a tournament player who is waiting (or knocked out) and watching: keep their seat
+                    await self.send(client_id, room.lobby_state())
+                    await self.send_game_state_to(room, client_id)
                 else:
                     if client_id not in room.spectators:
                         if len(room.spectators) >= MAX_SPECTATORS:
@@ -539,6 +658,35 @@ class RoomManager:
             self._pick_new_host(room)
             await self.broadcast_lobby(room)
 
+        elif mtype == "set_tournament":
+            room = self._get_room(client_id)
+            if not room or room.host_id != client_id or room.started or room.solo:
+                await self.send(client_id, {"type": "error", "message": "Only the host can change this, before the game starts"})
+                return
+            room.tournament = msg.get("on") is True
+            self._touch(room)
+            await self.broadcast_lobby(room)
+
+        elif mtype == "tournament_ready":
+            room = self._get_room(client_id)
+            if not room or room.t is None or room.t["stage"] != "ready" or client_id not in room.t["players"]:
+                return
+            if client_id not in room.t["ready"]:
+                room.t["ready"].append(client_id)
+            await self._t_check_ready(room)
+
+        elif mtype == "tournament_remove":
+            room = self._get_room(client_id)
+            pid = msg.get("player_id")
+            if not room or room.t is None or room.host_id != client_id or room.t["stage"] != "ready":
+                return
+            if pid == client_id or pid in room.bots or pid not in room.t["players"]:
+                return
+            if pid in room.t["ready"]:
+                return                                   # only someone who is not Ready can be removed
+            self._t_out(room, pid, "removed by host")
+            await self._t_after_drop(room)
+
         elif mtype == "start_game":
             room = self._get_room(client_id)
             if not room or room.host_id != client_id:
@@ -548,6 +696,12 @@ class RoomManager:
                 return
             if len(room.players) < 2:
                 await self.send(client_id, {"type": "error", "message": "Need at least 2 players"})
+                return
+            if room.tournament:
+                if len(room.players) < T_MIN_PLAYERS:
+                    await self.send(client_id, {"type": "error", "message": f"A tournament needs at least {T_MIN_PLAYERS} players"})
+                    return
+                await self._t_begin(room)
                 return
             room.start_game()
             await self.start_turn_timer(room)
@@ -610,6 +764,9 @@ class RoomManager:
                 return
             if client_id not in room.players:
                 return                                   # spectators can't reset the room
+            if room.t is not None and room.t["stage"] != "done":
+                await self.send(client_id, {"type": "error", "message": "The tournament is still running"})
+                return
             await self._reset_to_lobby(room)
 
         elif mtype == "leave_room":
@@ -617,6 +774,8 @@ class RoomManager:
             self.player_rooms.pop(client_id, None)
             if not room:
                 return
+            if room.t is not None:
+                self._t_out(room, client_id, "left")
             player_left_game = False
             if room.started and room.game:
                 if room.game.get_player(client_id):
@@ -640,6 +799,8 @@ class RoomManager:
                     await self.broadcast_game_state(room)
             else:
                 await self.broadcast_lobby(room)
+            if room.t is not None:
+                await self._t_after_drop(room)
 
         elif mtype == "rematch":
             room = self._get_room(client_id)
@@ -647,6 +808,10 @@ class RoomManager:
                 await self.send(client_id, {"type": "error", "message": "Only the host can start a rematch"})
                 return
             if not (room.started and room.game and room.game.game_over):
+                return
+            if room.t is not None:
+                if room.t["stage"] == "done":
+                    await self._reset_to_lobby(room)     # after a tournament, "play again" goes back to the waiting room
                 return
             staying = [p.id for p in room.game.players
                        if p.id in room.players and (p.id in room.bots or (p.connected and p.id in self.connections))]
