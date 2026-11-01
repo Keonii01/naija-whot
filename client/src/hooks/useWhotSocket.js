@@ -159,6 +159,7 @@ export function useWhotSocket() {
     addBot: () => send({ type: 'add_bot' }),
     removeBot: (id) => send({ type: 'remove_bot', bot_id: id }),
     setRules: (rules) => send({ type: 'set_rules', rules }),
+    setTournament: (on) => send({ type: 'set_tournament', on }),
     playCard: (cardId, chosenShape) => send({ type: 'play_card', card_id: cardId, chosen_shape: chosenShape }),
     playCards: (cardIds, chosenShape) => send({ type: 'play_cards', card_ids: cardIds, chosen_shape: chosenShape }),
     previewPlay: (cardIds) => send({ type: 'preview_play', card_ids: cardIds }),

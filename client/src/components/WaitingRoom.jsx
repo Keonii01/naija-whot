@@ -84,7 +84,7 @@ function EmptySeat({ n }) {
 }
 
 export default function WaitingRoom({ socket }) {
-  const { room, clientId, startGame, takeSeat, setRules, addBot, removeBot, leaveRoom } = socket;
+  const { room, clientId, startGame, takeSeat, setRules, setTournament, addBot, removeBot, leaveRoom } = socket;
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -104,7 +104,9 @@ export default function WaitingRoom({ socket }) {
   const isHost = host_id === clientId;
   const hostName = players.find((p) => p.id === host_id)?.name ?? 'the host';
   const count = players.length;
-  const canStart = count >= 2;
+  const tournament = !!room.tournament;
+  const minPlayers = tournament ? 3 : 2;     // a tournament needs at least 3 (the server checks too)
+  const canStart = count >= minPlayers;
   const dealt = count <= 4 ? 5 : 3; // matches the server's deal rule
   const rules = room.rules ?? STANDARD_RULES;
   const customCount = RULE_OPTIONS.filter((r) => rules[r.key] !== STANDARD_RULES[r.key]).length;
@@ -153,7 +155,10 @@ export default function WaitingRoom({ socket }) {
             </div>
             {last_result && (
               <span className="rounded-full bg-secondary/15 px-3 py-1.5 text-xs font-bold text-secondary">
-                Last game: {last_result.winner ? `${last_result.winner} won` : 'it was a tie'}
+                {last_result.reason === 'tournament'
+                  ? (last_result.winner ? `Tournament won by ${last_result.winner}` : 'The tournament ended with no winner')
+                  : `Last game: ${last_result.winner ? `${last_result.winner} won` : 'it was a tie'}`
+                }
               </span>
             )}
           </div>
@@ -187,6 +192,23 @@ export default function WaitingRoom({ socket }) {
                 WhatsApp
               </a>
             </div>
+          </div>
+
+          {/* game mode: a normal game, or a knock-out tournament */}
+          <div className="mt-4 flex items-start justify-between gap-3 rounded-2xl bg-surface-container-lowest/50 p-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-white">Tournament</p>
+              <p className="text-[11px] leading-snug text-on-surface-variant">
+                Knock-out rounds. After each match the player with the highest card total is out, until one player is left. Needs 3 or more players.
+              </p>
+            </div>
+            {isHost ? (
+              <RuleSwitch on={tournament} label="Tournament" onChange={() => setTournament(!tournament)} />
+            ) : (
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold ${tournament ? 'bg-primary/20 text-primary' : 'bg-white/10 text-on-surface-variant'}`}>
+                {tournament ? 'ON' : 'OFF'}
+              </span>
+            )}
           </div>
 
           {/* real match facts + house rules */}
@@ -248,7 +270,7 @@ export default function WaitingRoom({ socket }) {
                 Add computer
               </button>
             ) : (
-              <span className="text-[11px] font-semibold text-on-surface-variant">Need at least 2 to start</span>
+              <span className="text-[11px] font-semibold text-on-surface-variant">Need at least {minPlayers} to start</span>
             )}
           </div>
           <div className="mt-3 grid grid-cols-4 gap-x-1.5 gap-y-3 sm:gap-x-3 sm:gap-y-4">
@@ -284,12 +306,15 @@ export default function WaitingRoom({ socket }) {
                 disabled={!canStart}
                 className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-gold font-display text-lg font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
               >
-                {canStart ? `Start Game (${count} players)` : 'Waiting for one more player…'}
+                {canStart
+                  ? `${tournament ? 'Start Tournament' : 'Start Game'} (${count} players)`
+                  : `Waiting for ${minPlayers - count} more player${minPlayers - count === 1 ? '' : 's'}…`
+                }
               </button>
             ) : (
               <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 text-center font-display font-bold text-on-surface">
                 <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
-                Waiting for {hostName} to start the game…
+                Waiting for {hostName} to start the {tournament ? 'tournament' : 'game'}…
               </div>
             )}
             <button
