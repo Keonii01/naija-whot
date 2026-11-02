@@ -65,7 +65,7 @@ export default function MatchResult({ gameState, clientId, isHost, isSpectator, 
       <Decor />
       <div className="absolute w-[420px] h-[420px] rounded-full bg-secondary-container/20 blur-[110px] pointer-events-none" />
 
-      <div className="relative w-full max-w-xl max-h-[94dvh] overflow-y-auto rounded-[24px] bg-surface-container-low/90 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,18,11,0.85)] border border-secondary/30 p-4 sm:p-8">
+      <div className="relative w-full max-w-xl max-h-[94dvh] overflow-y-auto slim-scroll rounded-[24px] bg-surface-container-low/90 backdrop-blur-2xl shadow-[0_24px_60px_rgba(0,18,11,0.85)] border border-secondary/30 p-4 sm:p-6">
         {/* medallion + headline */}
         <div className="flex flex-col items-center text-center mb-5">
           <div className="relative flex items-center justify-center">
