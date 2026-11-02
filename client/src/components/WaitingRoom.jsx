@@ -126,7 +126,7 @@ export default function WaitingRoom({ socket }) {
   )}`;
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden font-body text-on-surface bg-gradient-to-b from-primary-container/90 via-surface-container-high to-surface-container-low">
+    <div className="relative min-h-[100dvh] overflow-clip font-body text-on-surface bg-gradient-to-b from-primary-container/90 via-surface-container-high to-surface-container-low">
       {/* felt: soft vignette + faint dotted watermark (same as the game table) */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(131,215,177,0.10),transparent_55%,rgba(0,0,0,0.55))]" />
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[0.12] bg-[radial-gradient(#83d7b1_1px,transparent_1px)] [background-size:16px_16px]" />
@@ -134,7 +134,7 @@ export default function WaitingRoom({ socket }) {
       {showHelp && <HowToPlay onClose={() => setShowHelp(false)} rules={rules} turnSeconds={TURN_SECONDS} />}
 
       <div className="relative z-10 flex min-h-[100dvh] items-center justify-center p-3 pt-16 sm:p-6">
-        <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl bg-surface-container/85 p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
+        <div className="relative w-full max-w-3xl overflow-clip rounded-3xl bg-surface-container/85 p-4 sm:p-8 shadow-2xl backdrop-blur-xl">
           {/* specular glass edge */}
           <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-secondary/60 to-transparent" />
           <div aria-hidden="true" className="absolute inset-x-8 top-1 h-px bg-white/20" />
@@ -199,7 +199,7 @@ export default function WaitingRoom({ socket }) {
             <div className="min-w-0">
               <p className="text-sm font-bold text-white">Tournament</p>
               <p className="text-[11px] leading-snug text-on-surface-variant">
-                Knock-out rounds. After each match the player with the highest card total is out, until one player is left. Needs 3 or more players.
+                Knock-out rounds: after each match the highest card total is out. Needs 3 or more players.
               </p>
             </div>
             {isHost ? (
@@ -283,40 +283,7 @@ export default function WaitingRoom({ socket }) {
           </div>
 
           {/* actions */}
-          <div className="mt-6 flex flex-col gap-3">
-            {isWatcher ? (
-              <>
-                <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 py-2 text-center font-display text-sm sm:text-base font-bold text-on-surface">
-                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
-                  You are watching. The game shows up here when the host starts it.
-                </div>
-                <button
-                  type="button"
-                  onClick={takeSeat}
-                  disabled={count >= MAX_SEATS}
-                  className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-gold font-display text-base font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
-                >
-                  {count >= MAX_SEATS ? 'Room is full' : 'Take a seat and play'}
-                </button>
-              </>
-            ) : isHost ? (
-              <button
-                type="button"
-                onClick={startGame}
-                disabled={!canStart}
-                className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-gold font-display text-lg font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
-              >
-                {canStart
-                  ? `${tournament ? 'Start Tournament' : 'Start Game'} (${count} players)`
-                  : `Waiting for ${minPlayers - count} more player${minPlayers - count === 1 ? '' : 's'}…`
-                }
-              </button>
-            ) : (
-              <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 text-center font-display font-bold text-on-surface">
-                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
-                Waiting for {hostName} to start the {tournament ? 'tournament' : 'game'}…
-              </div>
-            )}
+          <div className="mt-6 flex flex-col gap-3 pb-24">
             <button
               type="button"
               onClick={leaveRoom}
@@ -332,6 +299,44 @@ export default function WaitingRoom({ socket }) {
               How to play
             </button>
           </div>
+        </div>
+      </div>
+      {/* the main button stays on screen wherever the player has scrolled to (outside the card, because the card's blur would trap a fixed child) */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-surface-container/95 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-8">
+          {isWatcher ? (
+            <>
+              <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 py-2 text-center font-display text-sm sm:text-base font-bold text-on-surface">
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
+                You are watching. The game shows up here when the host starts it.
+              </div>
+              <button
+                type="button"
+                onClick={takeSeat}
+                disabled={count >= MAX_SEATS}
+                className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-gold font-display text-base font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
+              >
+                {count >= MAX_SEATS ? 'Room is full' : 'Take a seat and play'}
+              </button>
+            </>
+          ) : isHost ? (
+            <button
+              type="button"
+              onClick={startGame}
+              disabled={!canStart}
+              className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-gold font-display text-lg font-extrabold text-emerald-deep shadow-[0_4px_14px_rgba(255,201,77,0.35)] transition hover:bg-gold-hover active:scale-[0.99] disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none touch-manipulation"
+            >
+              {canStart
+                ? `${tournament ? 'Start Tournament' : 'Start Game'} (${count} players)`
+                : `Waiting for ${minPlayers - count} more player${minPlayers - count === 1 ? '' : 's'}…`
+              }
+            </button>
+          ) : (
+            <div className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl bg-surface-container-lowest/60 px-4 text-center font-display font-bold text-on-surface">
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-secondary" />
+              Waiting for {hostName} to start the {tournament ? 'tournament' : 'game'}…
+            </div>
+          )}
         </div>
       </div>
     </div>
