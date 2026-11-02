@@ -117,6 +117,7 @@ class WhotGame:
         self.last_action = "Game started!"
         self.event_seq = 0
         self.last_event = None          # the headline of the latest move, for the table's cue banner
+        self.market_passes = 0          # turns in a row that ran out with the market empty; a whole round of them ends the game
         self._deal()
 
     def _event(self, type, actor_id, target_ids=(), amount=0, card=None, shape=None):
@@ -213,7 +214,9 @@ class WhotGame:
         self._sync_last_card()
         if self.game_over or self._can_draw():
             return
-        if self.playable_cards(self.current_player()):
+        # the market is finished: the game ends when the player to move has nothing to play,
+        # or when a whole round has gone by with nobody playing
+        if self.playable_cards(self.current_player()) and self.market_passes < len(self.players):
             return
         self._finish("market")
         if self.winner_id:
@@ -337,6 +340,7 @@ class WhotGame:
                 groups.append([c])
 
         was_last_card = len(player.hand) == 1     # a longer move never needs the call
+        self.market_passes = 0
         played = " + ".join(repr(c) for c in cards)
         messages, headline = [], None
         for i, group in enumerate(groups):
@@ -467,6 +471,7 @@ class WhotGame:
 
         if self.pending_pick > 0:
             drawn = self.draw_from_deck(player, self.pending_pick)
+            self.market_passes = 0
             msg = f"{player.name} picks {len(drawn)} cards!"
             self.pending_pick = 0
             self._advance()
@@ -476,6 +481,7 @@ class WhotGame:
             return {"success": True, "message": msg}
 
         drawn = self.draw_from_deck(player, 1)
+        self.market_passes = 0
         self._advance()
         self._event("draw", player.id, [player.id], len(drawn))
         self.last_action = f"{player.name} draws a card."
@@ -492,9 +498,13 @@ class WhotGame:
             self.pending_pick = 0
         else:
             drawn = self.draw_from_deck(player, 1)
+        self.market_passes = 0 if drawn else self.market_passes + 1     # nothing drawn: the market is empty and this turn was passed
         self._advance()
         self._event("timeout_draw", player.id, [player.id], len(drawn))
-        self.last_action = f"⏱️ {player.name} ran out of time and drew a card."
+        if drawn:
+            self.last_action = f"⏱️ {player.name} ran out of time and drew {'a card' if len(drawn) == 1 else f'{len(drawn)} cards'}."
+        else:
+            self.last_action = f"⏱️ {player.name} ran out of time. The market is finished, so nothing was drawn."
         self._check_market_end()
 
     def state_for(self, player_id):

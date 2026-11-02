@@ -1,3 +1,5 @@
+import TournamentPanel from './TournamentPanel';
+
 /**
  * End-of-match screen, following the Stitch "Win Screen Modal":
  * trophy medallion, status pill, headline, final standings, action buttons.
@@ -43,7 +45,7 @@ function Decor() {
   );
 }
 
-export default function MatchResult({ gameState, clientId, isHost, isSpectator, solo, onPlayAgain, onBackToRoom, onLeave }) {
+export default function MatchResult({ gameState, clientId, isHost, isSpectator, solo, onPlayAgain, onBackToRoom, onLeave, onTournamentReady, onTournamentRemove }) {
   const ranking = gameState.ranking ?? [];
   const winner = gameState.players.find((p) => p.id === gameState.winner_id);
   const youWon = gameState.winner_id === clientId;
@@ -144,7 +146,22 @@ export default function MatchResult({ gameState, clientId, isHost, isSpectator, 
           </div>
         )}
 
-        {/* actions */}
+        {/* actions: a tournament has its own panel (who is out, who is Ready), a normal game keeps its buttons */}
+        {gameState.t && (
+          <TournamentPanel
+            gameState={gameState}
+            clientId={clientId}
+            onReady={onTournamentReady}
+            onRemove={onTournamentRemove}
+            onBackToRoom={onBackToRoom}
+            onLeave={onLeave}
+          />
+        )}
+        {gameState.t ? (
+          <button onClick={onLeave} className="mx-auto block py-2 px-3 text-sm text-error underline touch-manipulation">
+            Leave room
+          </button>
+        ) : (
         <div className="flex flex-col gap-3">
           {!isSpectator && (
             <div className="flex gap-3">
@@ -180,6 +197,7 @@ export default function MatchResult({ gameState, clientId, isHost, isSpectator, 
             Leave room
           </button>
         </div>
+        )}
       </div>
     </div>
   );

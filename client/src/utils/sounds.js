@@ -241,7 +241,8 @@ export const sounds = {
       case 'general_market': this.cardPlay(); this.market(); break;
       case 'whot': this.cardPlay(); this.whot(); break;
       case 'last_card': this.cardPlay(); this.penalty(); this.cardDraw(n); break;
-      case 'pick_taken': case 'draw': case 'timeout_draw': this.cardDraw(n); break;
+      case 'pick_taken': case 'draw': this.cardDraw(n); break;
+      case 'timeout_draw': this.cardDraw(ev.amount); break;   // nothing to hear when the market is empty and nothing was drawn
       case 'win': this.cardPlay(); break;
       default: break;
     }

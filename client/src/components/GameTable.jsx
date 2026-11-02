@@ -12,7 +12,7 @@ import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
 
 export default function GameTable({ socket }) {
-  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby, preview, previewPlay } = socket;
+  const { gameState, clientId, playCards, drawCard, leaveRoom, rematch, lastCard, returnToLobby, preview, previewPlay, tournamentReady, tournamentRemove } = socket;
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
   const [selected, setSelected] = useState([]);          // ordered ids for a multi-play
   // optional help, off by default: ring the cards that can be added to a move (a personal setting, stays on this device)
@@ -234,10 +234,13 @@ export default function GameTable({ socket }) {
 
   const currentPlayerName = gameState.players.find((p) => p.id === gameState.current_player_id)?.name;
 
+  const marketClosed = gameState.deck_count === 0 && gameState.players.length > 2;
+
   // the permanent "what you must do now" line; it comes straight from the server state, so it clears the moment the penalty is taken
   const mustDo = !isMyTurn || gameState.game_over ? null
     : gameState.pending_pick > 0 ? `Pick ${gameState.pending_pick}, or answer with a ${gameState.top_card?.number}`
     : gameState.free_play ? 'Free play: any card'
+    : marketClosed ? 'The market is finished. Play a card. The game ends when someone has nothing to play.'
     : 'Your turn: play normally';
 
   const isHost = gameState.host_id === clientId;
@@ -275,6 +278,8 @@ export default function GameTable({ socket }) {
           onPlayAgain={rematch}
           onBackToRoom={returnToLobby}
           onLeave={leaveRoom}
+          onTournamentReady={tournamentReady}
+          onTournamentRemove={tournamentRemove}
         />
       )}
 
@@ -495,12 +500,12 @@ export default function GameTable({ socket }) {
               <button
                 onClick={drawCard}
                 data-silent
-                disabled={!isMyTurn}
+                disabled={!isMyTurn || marketClosed}
                 className="w-full min-h-[48px] rounded-xl bg-gold hover:bg-gold-hover text-emerald-deep font-display font-bold shadow-[0_4px_14px_rgba(255,201,77,0.35)] disabled:opacity-40 disabled:shadow-none flex items-center justify-center gap-2 touch-manipulation"
               >
                 <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M12 8v8M8 12h8" /></svg>
-                <span className="sm:hidden">Draw Card from Market</span>
-                <span className="hidden sm:inline">Draw Card</span>
+                <span className="sm:hidden">{marketClosed ? 'Market finished' : 'Draw Card from Market'}</span>
+                <span className="hidden sm:inline">{marketClosed ? 'Market finished' : 'Draw Card'}</span>
               </button>
             </div>
           </div>

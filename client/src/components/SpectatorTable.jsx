@@ -42,7 +42,7 @@ const Eye = ({ className = 'h-4 w-4' }) => (
 );
 
 export default function SpectatorTable({ socket }) {
-  const { gameState, room, clientId, rematch, returnToLobby, leaveRoom } = socket;
+  const { gameState, room, clientId, rematch, returnToLobby, leaveRoom, tournamentReady, tournamentRemove } = socket;
   const prevState = useRef(null);
   const counting = useMarketCount(gameState);
   const cue = useCue(gameState.last_event, clientId, gameState.players); // the same cue pill the players see
@@ -101,6 +101,8 @@ export default function SpectatorTable({ socket }) {
           onPlayAgain={rematch}
           onBackToRoom={returnToLobby}
           onLeave={leaveRoom}
+          onTournamentReady={tournamentReady}
+          onTournamentRemove={tournamentRemove}
         />
       )}
 

@@ -46,7 +46,7 @@ export function describeEvent(event, clientId, players) {
     case 'last_card':
       return { text: `${actor} didn't call Last Card and ${pick(event.actor_id)} ${n}`, tone: isYou(event.actor_id) ? 'danger' : 'info' };
     case 'timeout_draw':
-      return { text: `${actor} ran out of time and picked ${n}`, tone: isYou(event.actor_id) ? 'danger' : 'info' };
+      return { text: n > 0 ? `${actor} ran out of time and picked ${n}` : `${actor} ran out of time`, tone: isYou(event.actor_id) ? 'danger' : 'info' };
     default:
       return null; // play, draw, win
   }

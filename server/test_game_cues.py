@@ -128,4 +128,13 @@ g.deck = [W.WhotCard('Square',7)]
 g.draw_from_deck(g.get_player("p0"), 2)
 check("discard_count: back to one after the deck runs out and the pile is reshuffled", g.state_for("p0")["discard_count"] == 1 and g.top_card.number == 9)
 
+# ---- a timeout when the market is empty draws nothing, and says so ----
+g = game(2, [[('Circle',4)], [('Circle',6)]]); g.deck = []; g.reshuffle_when_empty = False   # the next player still has a card to play, so the game goes on
+g.force_timeout_draw("p0")
+check("timeout with an empty market: nothing is drawn", g.state_for("p1")["last_event"]["type"] == "timeout_draw" and g.state_for("p1")["last_event"]["amount"] == 0)
+check("timeout with an empty market: the message does not claim a card was drawn", "drew" not in g.last_action and "nothing was drawn" in g.last_action)
+g = game(2, [[('Circle',4)], [('Circle',6)]]); g.deck = [W.WhotCard('Square',7), W.WhotCard('Square',9)]
+g.force_timeout_draw("p0")
+check("timeout with cards in the market: still says a card was drawn", "drew a card" in g.last_action and g.state_for("p1")["last_event"]["amount"] == 1)
+
 print("ALL PASSED")
