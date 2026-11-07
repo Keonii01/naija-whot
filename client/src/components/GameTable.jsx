@@ -7,6 +7,8 @@ import MatchResult from './MatchResult';
 import CardFlight from './CardFlight';
 import DrawFlight from './DrawFlight';
 import MarketClosed from './MarketClosed';
+import ChampionScreen from './ChampionScreen';
+import TournamentBanner from './TournamentBanner';
 import { useMarketCount } from '../hooks/useMarketCount';
 import { useCue } from '../hooks/useCue';
 import { sounds } from '../utils/sounds';
@@ -268,7 +270,11 @@ export default function GameTable({ socket }) {
 
       {gameState.game_over && counting && <MarketClosed />}
 
-      {gameState.game_over && !counting && (
+      {gameState.game_over && !counting && gameState.t?.stage === 'done' && (
+        <ChampionScreen gameState={gameState} clientId={clientId} onBackToRoom={returnToLobby} onLeave={leaveRoom} />
+      )}
+
+      {gameState.game_over && !counting && gameState.t?.stage !== 'done' && (
         <MatchResult
           gameState={gameState}
           clientId={clientId}
@@ -328,6 +334,8 @@ export default function GameTable({ socket }) {
             <button onClick={leaveRoom} className="underline text-on-surface">Leave</button>
           </div>
         )}
+
+        <TournamentBanner t={gameState.t} clientId={clientId} />
 
         {/* live action banner */}
         <div role="status" aria-live="polite" className={`mx-auto w-full max-w-md flex items-center gap-2 rounded-2xl backdrop-blur-xl px-3 py-1.5 shadow-lg transition-colors ${cue ? CUE_TONE[cue.tone] : 'bg-surface-container-high/85'}`}>

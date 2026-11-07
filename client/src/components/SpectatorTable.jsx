@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
+import { useSpectatorFlights } from '../hooks/useSpectatorFlights';
 import Card from './Card';
 import OpponentPod from './OpponentPod';
 import MatchResult from './MatchResult';
 import MarketClosed from './MarketClosed';
+import ChampionScreen from './ChampionScreen';
+import TournamentBanner from './TournamentBanner';
 import { useMarketCount } from '../hooks/useMarketCount';
 import { useCue } from '../hooks/useCue';
 import { CUE_TONE } from '../cues';
@@ -46,6 +49,7 @@ export default function SpectatorTable({ socket }) {
   const prevState = useRef(null);
   const counting = useMarketCount(gameState);
   const cue = useCue(gameState.last_event, clientId, gameState.players); // the same cue pill the players see
+  const { pileRef, deckRef, heldTop, layer } = useSpectatorFlights(gameState); // cards slide instead of jumping
   const TURN_SECONDS = gameState.turn_seconds ?? 15;
 
   // the same sounds the players hear, from the side of the table
@@ -90,9 +94,15 @@ export default function SpectatorTable({ socket }) {
         <span className="absolute bottom-28 right-32 rotate-45 text-9xl text-primary/10">✚</span>
       </div>
 
+      {layer}
+
       {gameState.game_over && counting && <MarketClosed />}
 
-      {gameState.game_over && !counting && (
+      {gameState.game_over && !counting && gameState.t?.stage === 'done' && (
+        <ChampionScreen gameState={gameState} clientId={clientId} onBackToRoom={returnToLobby} onLeave={leaveRoom} />
+      )}
+
+      {gameState.game_over && !counting && gameState.t?.stage !== 'done' && (
         <MatchResult
           gameState={gameState}
           clientId={clientId}
@@ -129,6 +139,8 @@ export default function SpectatorTable({ socket }) {
             Leave
           </button>
         </div>
+
+        <TournamentBanner t={gameState.t} clientId={clientId} />
 
         {/* the table */}
         <div className="flex flex-1 items-center justify-center">
@@ -182,7 +194,7 @@ export default function SpectatorTable({ socket }) {
 
                 <div className="flex items-start justify-center gap-3 sm:gap-10">
                   <div className="flex flex-col items-center gap-2">
-                    <div className="relative">
+                    <div ref={deckRef} className="relative">
                       <div className="absolute inset-0 translate-x-1 translate-y-2 rounded-xl bg-surface-container-highest opacity-70" />
                       <div className="absolute inset-0 translate-x-0.5 translate-y-1 rounded-xl bg-primary-container opacity-85" />
                       <Card faceDown size="lg" />
@@ -194,9 +206,11 @@ export default function SpectatorTable({ socket }) {
 
                   <div className="flex flex-col items-center gap-2">
                     <div className="relative">
-                      <div className="absolute inset-0 -rotate-[7deg] translate-y-0.5 rounded-xl bg-white/70 opacity-60" />
-                      <div className="relative rotate-2">
-                        <Card card={top} size="lg" />
+                      {(gameState.discard_count ?? 2) > 1 && (
+                        <div className="absolute inset-0 -rotate-[7deg] translate-y-0.5 rounded-xl bg-white/70 opacity-60" />
+                      )}
+                      <div ref={pileRef} className="relative rotate-2">
+                        <Card card={heldTop ?? top} size="lg" />
                       </div>
                     </div>
                     <span className={`rounded-full px-3 py-0.5 text-xs font-semibold shadow ${activeChip}`}>Active: {activeLabel}</span>

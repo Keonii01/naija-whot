@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import TournamentPanel from './TournamentPanel';
 
 /**
@@ -46,6 +47,8 @@ function Decor() {
 }
 
 export default function MatchResult({ gameState, clientId, isHost, isSpectator, solo, onPlayAgain, onBackToRoom, onLeave, onTournamentReady, onTournamentRemove }) {
+  const [hidden, setHidden] = useState(false);   // a knocked-out player can close this window and watch; it comes back with the next result
+  if (hidden) return null;
   const ranking = gameState.ranking ?? [];
   const winner = gameState.players.find((p) => p.id === gameState.winner_id);
   const youWon = gameState.winner_id === clientId;
@@ -155,6 +158,7 @@ export default function MatchResult({ gameState, clientId, isHost, isSpectator, 
             onRemove={onTournamentRemove}
             onBackToRoom={onBackToRoom}
             onLeave={onLeave}
+            onWatch={() => setHidden(true)}
           />
         )}
         {gameState.t ? (

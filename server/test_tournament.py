@@ -3,6 +3,8 @@ import asyncio, json, sys
 sys.path.insert(0, '.')
 import room_manager as RM
 RM.BOT_DELAY = (0.01, 0.03)
+RM.T_BOT_READY = (0.05, 0.08)     # computers tap Ready after this long (2 to 2.5 seconds in the real game)
+RM.T_RESULT_PAUSE = 0.30          # a game with only computers waits at least this long (6 seconds in the real game)
 import whot_engine as W
 
 def check(name, cond):
@@ -65,6 +67,7 @@ async def main():
     await end_match(mgr, room, {A: 3, B: 9, C: 5})
     t = room.t
     check("match 1: the highest total is out", [o["id"] for o in t["out"]] == [B] and t["out"][0]["reason"] == "highest total")
+    check("match 1: each knock-out remembers its round", t["out"][0]["round"] == 1)
     check("match 1: the rest get ready for round 2", t["stage"] == "ready" and t["kind"] == "match" and t["round"] == 2 and t["players"] == [A, C] and t["alive"] == [A, C])
     check("match 1: the result stays on screen until the next game starts", room.game is first_game and room.game.game_over)
     await mgr.handle_message(A, {"type": "tournament_ready"})
@@ -135,7 +138,7 @@ async def main():
     await end_match(mgr, room, {A: 1, B: 9, C: 2, D: 3})
     await mgr.handle_message(A, {"type": "tournament_ready"}); await mgr.handle_message(C, {"type": "tournament_ready"})
     await mgr.handle_message(D, {"type": "leave_room"})
-    check("leave: leaving between matches puts you out", room.t["out"][-1] == {"id": D, "name": "D", "reason": "left"} and D not in room.players)
+    check("leave: leaving between matches puts you out", room.t["out"][-1]["id"] == D and room.t["out"][-1]["reason"] == "left" and D not in room.players)
     check("leave: the others are all Ready so the match starts", room.t["stage"] == "match" and {p.id for p in room.game.players} == {A, C})
     await mgr.handle_message(B, {"type": "leave_room"})
     check("leave: a knocked-out player leaving changes nothing", [o["id"] for o in room.t["out"]].count(B) == 1 and room.t["stage"] == "match")
@@ -174,18 +177,52 @@ async def main():
     await mgr.handle_message(A, {"type": "rematch"})
     check("normal: rematch still works", not room.game.game_over and len(room.game.players) == 3)
 
-    # ---- computers are always Ready ----
+    # ---- computers tap Ready by themselves, after a pause ----
     mgr, room, (A,), w = await table(1, bots=2)
     await mgr.handle_message(A, {"type": "start_game"})
     first = room.game
     bot_ids = list(room.bots)
     await end_match(mgr, room, {A: 1, bot_ids[0]: 9, bot_ids[1]: 3})
-    check("bots: they are marked Ready by themselves", set(bot_ids[1:]) <= set(room.t["ready"]) or room.t["stage"] == "ready")
-    check("bots: only the human has to tap", room.t["players"] == [A, bot_ids[1]] and room.t["ready"] == [bot_ids[1]])
+    check("bots: not Ready at once, so the result can be read", room.t["ready"] == [] and room.game is first)
+    check("bots: the result stays up while they wait", room.t["stage"] == "ready" and set(room.t["players"]) == {A, bot_ids[1]})
+    check("bots: with a human playing there is no countdown (the game waits for the human)", room.t["next_at"] is None)
+    await asyncio.sleep(0.2)
+    check("bots: the computer taps Ready by itself after a moment", room.t["ready"] == [bot_ids[1]])
+    check("bots: but the game waits for the human", room.game is first)
     await mgr.handle_message(A, {"type": "tournament_ready"})
-    check("bots: the next match starts as soon as the human is Ready", room.game is not first and not room.game.game_over)
+    check("bots: the next match starts once the human is Ready too", room.game is not first and not room.game.game_over)
     for t_ in (room.turn_task, room.bot_task):
         if t_: t_.cancel()
+
+    # ---- only computers left to play: a longer pause, so a knocked-out player can read why ----
+    mgr, room, (A,), w = await table(1, bots=2)
+    await mgr.handle_message(A, {"type": "start_game"})
+    first = room.game
+    bot_ids = list(room.bots)
+    await end_match(mgr, room, {A: 9, bot_ids[0]: 1, bot_ids[1]: 3})
+    check("only computers: the human is out", [o["id"] for o in room.t["out"]] == [A] and set(room.t["players"]) == set(bot_ids))
+    import time as _time
+    check("only computers: the table publishes when the next game starts", room.t["next_at"] is not None and 0 < room.t["next_at"] - _time.time() <= RM.T_RESULT_PAUSE + 0.05)
+    await asyncio.sleep(0.15)
+    check("only computers: they have not started yet after the normal wait", room.game is first and room.t["stage"] == "ready")
+    await asyncio.sleep(0.4)
+    check("only computers: after the longer pause they play on, and the human can watch", room.game is not first and not room.game.game_over and A in room.players)
+    check("only computers: the countdown is cleared once the game starts", room.t["next_at"] is None)
+    check("only computers: the human watching sees the new game as a spectator", w[A].last("game_state")["state"]["is_spectator"] is True)
+    for t_ in (room.turn_task, room.bot_task):
+        if t_: t_.cancel()
+
+    # ---- the last human leaves: nothing keeps running ----
+    mgr, room, (A,), w = await table(1, bots=2)
+    await mgr.handle_message(A, {"type": "start_game"})
+    bot_ids = list(room.bots)
+    await end_match(mgr, room, {A: 9, bot_ids[0]: 1, bot_ids[1]: 3})
+    pending = list(room.t_tasks)
+    check("last human leaves: computers are waiting to tap Ready", len(pending) == 2)
+    await mgr.handle_message(A, {"type": "leave_room"})
+    await asyncio.sleep(0.1)
+    check("last human leaves: the room is gone", room.code not in mgr.rooms)
+    check("last human leaves: the computers' timers were cancelled", all(p.cancelled() or p.done() for p in pending) and room.t_tasks == [])
 
 asyncio.run(main())
 print("ALL PASSED")

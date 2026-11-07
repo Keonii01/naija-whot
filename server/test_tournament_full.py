@@ -4,6 +4,8 @@ import sys
 sys.path.insert(0, '.')
 import room_manager
 room_manager.BOT_DELAY = (0.01, 0.03)
+room_manager.T_BOT_READY = (0.02, 0.05)     # in the real game computers tap Ready after 2 to 2.5 seconds
+room_manager.T_RESULT_PAUSE = 0.05
 import main
 from fastapi.testclient import TestClient
 

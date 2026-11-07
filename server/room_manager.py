@@ -16,6 +16,8 @@ GAME_GRACE = 300     # empty game room is deleted after this
 AFK_LIMIT = 4        # consecutive missed turns before a player is removed (4 x 15s = one minute)
 MAX_PLAYERS = 8
 T_MIN_PLAYERS = 3          # a tournament needs at least this many players
+T_BOT_READY = (2.0, 2.5)   # a computer taps Ready after this many seconds (random), so the result can be read first
+T_RESULT_PAUSE = 12.0      # when only computers play the next game, wait at least this long so a knocked-out player can read the result
 SOLO_MAX_BOTS = 3          # a private game against the computer: you plus 1 to 3 computers
 MAX_SPECTATORS = 8   # watchers per room
 NAME_MAX = 16
@@ -63,6 +65,7 @@ class Room:
         self.rules = dict(DEFAULT_RULES)   # house rules, set by the host before the game starts
         self.tournament = False    # host option: play a knock-out tournament instead of a single game
         self.t = None              # tournament state while one is running (public information)
+        self.t_tasks = []          # pending "a computer taps Ready" timers
 
     def add_player(self, player_id, name):
         if player_id in self.players:
@@ -217,6 +220,7 @@ class RoomManager:
 
     def _delete_room(self, room):
         self._stop_timer(room)
+        self._t_cancel_tasks(room)
         for t in (room.cleanup_task, room.host_task, room.bot_task):
             if t and t is not asyncio.current_task():
                 t.cancel()
@@ -341,7 +345,7 @@ class RoomManager:
             t["players"].remove(pid)
         if pid in t["ready"]:
             t["ready"].remove(pid)
-        t["out"].append({"id": pid, "name": t["names"].get(pid, "Player"), "reason": reason})
+        t["out"].append({"id": pid, "name": t["names"].get(pid, "Player"), "reason": reason, "round": t["round"]})
 
     async def _t_begin(self, room):
         ids = list(room.order)
@@ -380,15 +384,45 @@ class RoomManager:
     async def _t_begin_ready(self, room):
         t = room.t
         t["stage"] = "ready"
-        t["ready"] = [pid for pid in t["players"] if pid in room.bots]   # computers are always ready
+        t["ready"] = []
+        self._t_cancel_tasks(room)
+        key = (t["round"], t["kind"])
+        humans_play = any(pid not in room.bots for pid in t["players"])
+        t["next_at"] = None if humans_play else time.time() + T_RESULT_PAUSE   # shown as a countdown when only computers play on
+        for pid in t["players"]:
+            if pid in room.bots:
+                # computers tap Ready by themselves after a couple of seconds, so the result can be read first
+                delay = random.uniform(*T_BOT_READY)
+                if not humans_play:
+                    delay = max(delay, T_RESULT_PAUSE)     # only computers play on: give anyone watching time to read it
+                room.t_tasks.append(asyncio.create_task(self._t_bot_ready(room, pid, delay, key)))
         await self._t_check_ready(room)
+
+    async def _t_bot_ready(self, room, pid, delay, key):
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        t = room.t
+        if self.rooms.get(room.code) is not room or t is None or t["stage"] != "ready" or (t["round"], t["kind"]) != key:
+            return
+        if pid in t["players"] and pid not in t["ready"]:
+            t["ready"].append(pid)
+            await self._t_check_ready(room)
+
+    def _t_cancel_tasks(self, room):
+        for task in room.t_tasks:
+            if task is not asyncio.current_task():
+                task.cancel()
+        room.t_tasks = []
 
     async def _t_check_ready(self, room):
         t = room.t
         if t is None or t["stage"] != "ready":
             return
         if len(t["players"]) >= 2 and all(pid in t["ready"] for pid in t["players"]):
-            t["stage"], t["ready"] = "match", []
+            t["stage"], t["ready"], t["next_at"] = "match", [], None
+            self._t_cancel_tasks(room)
             room.start_game(t["players"])
             await self.start_turn_timer(room)
         else:
